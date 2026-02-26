@@ -1,0 +1,265 @@
+{% extends "base.html" %}
+{% block title %}Live Inspection — RoadSense AI{% endblock %}
+{% block page_title %}🎥 Live Webcam Inspection{% endblock %}
+
+{% block head %}
+<style>
+  .insp-grid { display:grid; grid-template-columns:1fr 400px; gap:22px; }
+  @media(max-width:1100px){ .insp-grid{grid-template-columns:1fr;} }
+  .video-card { background:#0d0d1a; border-radius:14px; overflow:hidden; position:relative; }
+  #webcam-feed { width:100%; display:block; max-height:480px; object-fit:cover; }
+  #canvas-overlay { display:none; }
+  .video-status { position:absolute; top:14px; left:14px; background:rgba(0,0,0,.65); color:#fff; padding:5px 14px; border-radius:20px; font-size:.78rem; font-weight:700; }
+  .flash-overlay { position:absolute; top:0; left:0; right:0; bottom:0; border:4px solid #e94560; border-radius:14px; pointer-events:none; opacity:0; transition:opacity .15s; }
+  .gps-badge { background:#1a1a2e; color:#fff; padding:4px 12px; border-radius:20px; font-size:.75rem; font-family:monospace; }
+  .control-card { background:#fff; border-radius:14px; padding:22px; box-shadow:0 2px 12px rgba(0,0,0,.07); }
+  .stat-row { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:16px; }
+  .stat-box { background:#f0f2f5; border-radius:10px; padding:12px; text-align:center; }
+  .stat-box .val { font-size:1.5rem; font-weight:800; color:#1a1a2e; }
+  .stat-box .lbl { font-size:.7rem; color:#888; margin-top:2px; }
+  #btn-start { background:linear-gradient(135deg,#28a745,#20c997); color:#fff; border:none; border-radius:10px; padding:12px 24px; font-weight:700; font-size:1rem; width:100%; transition:.2s; }
+  #btn-start:hover { transform:translateY(-2px); box-shadow:0 6px 20px rgba(40,167,69,.35); }
+  #btn-stop  { background:linear-gradient(135deg,#e94560,#c0392b); color:#fff; border:none; border-radius:10px; padding:12px 24px; font-weight:700; font-size:1rem; width:100%; transition:.2s; display:none; }
+  #btn-stop:hover { transform:translateY(-2px); box-shadow:0 6px 20px rgba(233,69,96,.35); }
+  .detection-feed { max-height:300px; overflow-y:auto; }
+  .det-item { padding:10px 12px; border-bottom:1px solid #f0f0f0; font-size:.8rem; display:flex; align-items:center; gap:8px; }
+  .det-item img { width:60px; height:40px; border-radius:4px; object-fit:cover; flex-shrink:0; }
+  /* Summary Modal */
+  .summary-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.65); z-index:9998; align-items:center; justify-content:center; }
+  .summary-overlay.show { display:flex; }
+  .summary-modal { background:#fff; border-radius:18px; padding:32px; max-width:560px; width:calc(100% - 40px); box-shadow:0 20px 60px rgba(0,0,0,.4); animation:fadeIn .3s; max-height:90vh; overflow-y:auto; }
+  .summary-score { font-size:4rem; font-weight:900; line-height:1; }
+  .sum-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin:16px 0; }
+  .sum-cell { background:#f8f9fa; border-radius:10px; padding:12px; }
+  .sum-cell .sv { font-size:1.2rem; font-weight:800; color:#1a1a2e; }
+  .sum-cell .sl { font-size:.7rem; color:#888; }
+  .det-badge { display:inline-block; padding:3px 10px; border-radius:20px; font-size:.72rem; font-weight:700; color:#fff; margin:2px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<canvas id="canvas-overlay"></canvas>
+
+<!-- Summary Modal -->
+<div class="summary-overlay" id="sum-overlay">
+  <div class="summary-modal">
+    <h4 style="font-weight:900;color:#1a1a2e;margin-bottom:16px">🏁 Road Inspection Complete</h4>
+    <div class="text-center mb-2">
+      <div class="summary-score" id="sum-score">—</div>
+      <div style="font-size:1rem;font-weight:700;color:#666" id="sum-level">—</div>
+      <div style="font-size:.85rem;color:#aaa;margin-top:3px" id="sum-road">—</div>
+    </div>
+    <div class="sum-grid">
+      <div class="sum-cell"><div class="sv" id="sum-frames">—</div><div class="sl">Frames Captured</div></div>
+      <div class="sum-cell"><div class="sv" id="sum-defects" style="color:#e94560">—</div><div class="sl">Defect Frames</div></div>
+      <div class="sum-cell"><div class="sv" id="sum-eco">—</div><div class="sl">Economic Risk/30d</div></div>
+      <div class="sum-cell"><div class="sv" id="sum-action" style="font-size:.9rem">—</div><div class="sl">Required Action</div></div>
+    </div>
+    <div class="mb-3">
+      <p style="font-size:.78rem;font-weight:700;color:#888;margin-bottom:6px">Damage Types Found:</p>
+      <div id="sum-badges">—</div>
+    </div>
+    <div id="sum-img-wrap" style="display:none;margin-bottom:14px">
+      <p style="font-size:.78rem;font-weight:700;color:#888;margin-bottom:6px">Worst Detection:</p>
+      <img id="sum-img" style="width:100%;border-radius:8px" alt="worst"/>
+    </div>
+    <p style="font-size:.72rem;color:#bbb;margin-bottom:14px" id="sum-date"></p>
+    <div class="d-flex gap-2 flex-wrap">
+      <button id="sum-pdf" class="btn btn-danger fw-bold"><i class="fas fa-file-pdf me-1"></i>Download PDF</button>
+      <a href="/city-map"     class="btn btn-dark"><i class="fas fa-map me-1"></i>City Map</a>
+      <a href="/repair-queue" class="btn btn-outline-secondary"><i class="fas fa-list me-1"></i>Queue</a>
+      <button onclick="document.getElementById('sum-overlay').classList.remove('show')" class="btn btn-outline-secondary ms-auto">Close</button>
+    </div>
+  </div>
+</div>
+
+<div class="insp-grid">
+  <div>
+    <div class="video-card mb-3">
+      <video id="webcam-feed" autoplay muted playsinline></video>
+      <div class="flash-overlay" id="flash-overlay"></div>
+      <div class="video-status">
+        <span id="rec-dot" style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#888;margin-right:6px"></span>
+        <span id="status-text">Camera Off</span>
+      </div>
+    </div>
+    <div class="d-flex gap-3 align-items-center flex-wrap">
+      <span class="gps-badge" id="gps-label"><i class="fas fa-map-marker-alt me-1"></i>GPS: Waiting…</span>
+      <span class="badge bg-secondary" id="frame-label">Frames: 0</span>
+      <span class="badge bg-danger"    id="defect-label">Defects: 0</span>
+      <span id="session-timer" style="font-family:monospace;font-size:.82rem;color:#888">00:00</span>
+    </div>
+  </div>
+
+  <div>
+    <div class="control-card mb-3">
+      <h6 style="font-weight:800;margin-bottom:14px"><i class="fas fa-sliders me-2 text-danger"></i>Inspection Controls</h6>
+      <div class="mb-3">
+        <label class="form-label fw-bold" style="font-size:.8rem">Road Name</label>
+        <input type="text" id="road-name" class="form-control" placeholder="e.g. MG Road" value="MG Road"/>
+        <div style="font-size:.72rem;color:#aaa;margin-top:4px">
+          Enter road name → Start → Drive the full road → Stop.<br>
+          <strong>One aggregated record</strong> is saved when you click Stop.
+        </div>
+      </div>
+      <div class="stat-row">
+        <div class="stat-box"><div class="val" id="stat-frames">0</div><div class="lbl">Frames</div></div>
+        <div class="stat-box"><div class="val" id="stat-defects" style="color:#e94560">0</div><div class="lbl">Defect Frames</div></div>
+        <div class="stat-box"><div class="val" id="stat-worst">—</div><div class="lbl">Worst Score</div></div>
+        <div class="stat-box"><div class="val" id="stat-eco" style="color:#e94560">₹0</div><div class="lbl">Est. Risk</div></div>
+      </div>
+      <div id="worst-wrap" style="display:none;margin-bottom:12px">
+        <p style="font-size:.72rem;color:#888;margin-bottom:4px;font-weight:700">Live Worst Detection Preview:</p>
+        <img id="worst-img" style="width:100%;border-radius:8px;max-height:130px;object-fit:cover"/>
+      </div>
+      <button id="btn-start" onclick="startInspection()"><i class="fas fa-play me-2"></i>Start Inspection</button>
+      <button id="btn-stop"  onclick="stopInspection()"><i class="fas fa-stop me-2"></i>Stop & Save Road Report</button>
+    </div>
+
+    <div class="card">
+      <div class="card-header py-2 px-3" style="font-size:.85rem"><i class="fas fa-bolt me-2 text-warning"></i>Live Detections</div>
+      <div class="detection-feed" id="det-feed">
+        <div class="text-center text-muted py-4" style="font-size:.82rem">Start inspection to see detections…</div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let stream, captureInterval, timerInterval, startTime;
+let sessionId = null, isRunning = false, lastRecordId = null;
+let currentLat = 17.6868, currentLng = 75.9079;
+
+navigator.geolocation && navigator.geolocation.watchPosition(p => {
+  currentLat = p.coords.latitude; currentLng = p.coords.longitude;
+  document.getElementById("gps-label").innerHTML = `<i class="fas fa-map-marker-alt me-1"></i>${currentLat.toFixed(5)}, ${currentLng.toFixed(5)}`;
+}, () => {}, {enableHighAccuracy:true, maximumAge:2000});
+
+async function startCamera() {
+  try { stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"},audio:false}); }
+  catch { stream = await navigator.mediaDevices.getUserMedia({video:true,audio:false}).catch(()=>null); }
+  if (!stream) { alert("Camera access denied."); return false; }
+  document.getElementById("webcam-feed").srcObject = stream;
+  return true;
+}
+
+function captureFrame() {
+  const v=document.getElementById("webcam-feed"), c=document.getElementById("canvas-overlay");
+  c.width=v.videoWidth||640; c.height=v.videoHeight||480;
+  c.getContext("2d").drawImage(v,0,0);
+  return c.toDataURL("image/jpeg", 0.85);
+}
+
+function processFrame() {
+  fetch("/api/process-frame",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({session_id:sessionId, image:captureFrame(), lat:currentLat, lng:currentLng})
+  }).then(r=>r.json()).then(d=>{
+    document.getElementById("stat-frames").textContent  = d.frames_captured||0;
+    document.getElementById("frame-label").textContent  = "Frames: "+(d.frames_captured||0);
+    if (!d.detected) return;
+    document.getElementById("stat-defects").textContent = d.defect_frames||0;
+    document.getElementById("defect-label").textContent = "Defects: "+(d.defect_frames||0);
+    document.getElementById("stat-worst").textContent   = (d.worst_score||d.score)+"/10";
+    const eco = (d.worst_score||0)*150*500*30;
+    document.getElementById("stat-eco").textContent = eco>=100000?"\u20B9"+(eco/100000).toFixed(1)+"L":"\u20B9"+eco.toLocaleString("en-IN");
+    if (d.img_url) {
+      document.getElementById("worst-wrap").style.display="block";
+      document.getElementById("worst-img").src = d.img_url+"?t="+Date.now();
+    }
+    const fl=document.getElementById("flash-overlay");
+    fl.style.opacity="1"; setTimeout(()=>fl.style.opacity="0",300);
+    // Feed
+    const feed=document.getElementById("det-feed");
+    const ph=feed.querySelector(".text-muted"); if(ph) ph.remove();
+    const el=document.createElement("div"); el.className="det-item fade-in";
+    const types=(d.detections||[]).map(x=>x.label||x.class).join(", ");
+    el.innerHTML=`${d.img_url?`<img src="${d.img_url}" onerror="this.style.display='none'">`:""}
+      <div><div style="font-weight:700;color:${d.color||'#e94560'}">${d.score}/10 · ${d.level}</div>
+      <div style="color:#888;font-size:.75rem">${types||"—"} · ${new Date().toLocaleTimeString()}</div></div>`;
+    feed.insertBefore(el,feed.firstChild);
+    if(feed.children.length>25) feed.removeChild(feed.lastChild);
+  }).catch(console.error);
+}
+
+function startTimer() {
+  startTime=Date.now();
+  timerInterval=setInterval(()=>{
+    const s=Math.floor((Date.now()-startTime)/1000);
+    document.getElementById("session-timer").textContent=String(Math.floor(s/60)).padStart(2,"0")+":"+String(s%60).padStart(2,"0");
+  },1000);
+}
+
+async function startInspection() {
+  if(isRunning) return;
+  const rn=document.getElementById("road-name").value.trim();
+  if(!rn){alert("Please enter a road name.");return;}
+  const ok=await startCamera(); if(!ok) return;
+  const res=await fetch("/api/start-session",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({road_name:rn,lat:currentLat,lng:currentLng})});
+  const sess=await res.json();
+  sessionId=sess.session_id; isRunning=true;
+  document.getElementById("btn-start").style.display="none";
+  document.getElementById("btn-stop").style.display="block";
+  document.getElementById("road-name").disabled=true;
+  document.getElementById("rec-dot").style.background="#e94560";
+  document.getElementById("rec-dot").classList.add("pulse");
+  document.getElementById("status-text").textContent="● RECORDING — "+rn;
+  document.getElementById("det-feed").innerHTML='<div class="text-center text-muted py-3" style="font-size:.82rem">Capturing every 2 seconds…</div>';
+  ["stat-frames","stat-defects","stat-worst","stat-eco"].forEach(id=>{
+    document.getElementById(id).textContent=id==="stat-eco"?"\u20B90":id==="stat-worst"?"—":"0";
+  });
+  document.getElementById("worst-wrap").style.display="none";
+  startTimer();
+  captureInterval=setInterval(processFrame,2000);
+}
+
+async function stopInspection() {
+  if(!isRunning||!sessionId) return;
+  isRunning=false;
+  clearInterval(captureInterval); clearInterval(timerInterval);
+  if(stream) stream.getTracks().forEach(t=>t.stop());
+  document.getElementById("btn-start").style.display="block";
+  document.getElementById("btn-stop").style.display="none";
+  document.getElementById("road-name").disabled=false;
+  document.getElementById("rec-dot").style.background="#888";
+  document.getElementById("rec-dot").classList.remove("pulse");
+  document.getElementById("status-text").textContent="Processing…";
+  const res=await fetch("/api/stop-session",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({session_id:sessionId})});
+  const data=await res.json();
+  sessionId=null;
+  document.getElementById("status-text").textContent="Complete";
+  showSummary(data);
+}
+
+function showSummary(d) {
+  lastRecordId=d.record_id;
+  const colors={Good:"#28a745",Moderate:"#ffc107",Severe:"#fd7e14",Critical:"#dc3545",Emergency:"#7b0000"};
+  const color=d.color||colors[d.level]||"#e94560";
+  document.getElementById("sum-score").textContent=d.score+"/10";
+  document.getElementById("sum-score").style.color=color;
+  document.getElementById("sum-level").textContent=d.level;
+  document.getElementById("sum-road").textContent="\uD83D\uDCCD "+d.road_name;
+  document.getElementById("sum-frames").textContent=d.frames_captured||0;
+  document.getElementById("sum-defects").textContent=d.defect_frames||0;
+  const eco=d.economic_impact||0;
+  document.getElementById("sum-eco").textContent=eco>=100000?"\u20B9"+(eco/100000).toFixed(1)+"L":"\u20B9"+eco.toLocaleString("en-IN");
+  document.getElementById("sum-action").textContent=d.repair_action||"—";
+  document.getElementById("sum-date").textContent="Inspected: "+(d.inspection_date||"")+" at "+(d.inspection_time||"");
+  const bgMap={"Pothole":"#e94560","Alligator Crack":"#fd7e14","Transverse Crack":"#0f3460","Longitudinal Crack":"#28a745"};
+  const badges=(d.all_detections||[]).map(x=>`<span class="det-badge" style="background:${bgMap[x.label]||'#888'}">${x.label} \xD7${x.count}</span>`).join("")
+    ||'<span style="color:#aaa;font-size:.8rem">\u2705 No defects — road in good condition</span>';
+  document.getElementById("sum-badges").innerHTML=badges;
+  if(d.annotated_img){
+    document.getElementById("sum-img").src=d.annotated_img;
+    document.getElementById("sum-img-wrap").style.display="block";
+  } else {
+    document.getElementById("sum-img-wrap").style.display="none";
+  }
+  document.getElementById("sum-pdf").onclick=()=>{ if(lastRecordId) window.open("/api/report/"+lastRecordId,"_blank"); };
+  document.getElementById("sum-overlay").classList.add("show");
+}
+</script>
+{% endblock %}

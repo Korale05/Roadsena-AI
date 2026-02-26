@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+{% block title %}Repair Queue — RoadSense AI{% endblock %}
+{% block page_title %}📋 Priority Repair Queue{% endblock %}
+
+{% block head %}
+<style>
+  .queue-item {
+    background:#fff; border-radius:12px; padding:18px 22px; margin-bottom:14px;
+    box-shadow:0 2px 10px rgba(0,0,0,.06); border-left:5px solid #ccc;
+    display:flex; align-items:flex-start; gap:18px; transition:.2s;
+  }
+  .queue-item:hover { transform:translateX(4px); box-shadow:0 4px 16px rgba(0,0,0,.1); }
+  .rank-badge {
+    min-width:44px; height:44px; border-radius:50%; background:#1a1a2e;
+    color:#fff; display:flex; align-items:center; justify-content:center;
+    font-weight:800; font-size:1.1rem; flex-shrink:0;
+  }
+  .rank-1 { background:linear-gradient(135deg,#e94560,#c0392b); }
+  .rank-2 { background:linear-gradient(135deg,#fd7e14,#e67e22); }
+  .rank-3 { background:linear-gradient(135deg,#f5a623,#d4901c); }
+  .queue-main { flex:1; }
+  .queue-road { font-weight:800; font-size:1rem; color:#1a1a2e; margin-bottom:5px; }
+  .queue-meta { display:flex; flex-wrap:wrap; gap:10px; align-items:center; font-size:.8rem; color:#666; }
+  .queue-right { text-align:right; flex-shrink:0; }
+  .big-score { font-size:2rem; font-weight:900; line-height:1; }
+  .action-badge {
+    display:inline-block; padding:4px 12px; border-radius:20px;
+    font-size:.72rem; font-weight:700; color:#fff; margin-top:4px;
+  }
+  .budget-card { background:linear-gradient(135deg,#1a1a2e,#0f3460); color:#fff; border-radius:14px; padding:24px; margin-bottom:24px; }
+  .budget-card input { background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.2); color:#fff; border-radius:8px; padding:10px 14px; width:200px; }
+  .budget-card input::placeholder { color:rgba(255,255,255,.4); }
+  .budget-result { background:rgba(255,255,255,.08); border-radius:8px; padding:14px; margin-top:14px; display:none; }
+  .sev-good      { border-left-color:#28a745; }
+  .sev-moderate  { border-left-color:#ffc107; }
+  .sev-severe    { border-left-color:#fd7e14; }
+  .sev-critical  { border-left-color:#dc3545; }
+  .sev-emergency { border-left-color:#7b0000; }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Budget Optimizer -->
+<div class="budget-card mb-4">
+  <h6 style="font-weight:800;margin-bottom:4px"><i class="fas fa-rupee-sign me-2"></i>Budget Optimizer</h6>
+  <p style="opacity:.6;font-size:.82rem;margin-bottom:14px">Enter your monthly repair budget. AI will select roads to maximize city health improvement.</p>
+  <div class="d-flex align-items-center gap-3 flex-wrap">
+    <div class="input-group" style="width:260px">
+      <span class="input-group-text" style="background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.2);color:#fff">₹</span>
+      <input type="number" id="budget-input" class="form-control" placeholder="e.g. 500000" min="0"/>
+    </div>
+    <button onclick="runBudget()" style="background:#e94560;border:none;color:#fff;padding:10px 22px;border-radius:8px;font-weight:700;cursor:pointer">Optimize</button>
+  </div>
+  <div id="budget-result" class="budget-result"></div>
+</div>
+
+<!-- Queue Header -->
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h6 style="font-weight:800;color:#1a1a2e;margin:0"><i class="fas fa-sort-amount-down me-2 text-danger"></i>All Roads — Sorted by Severity</h6>
+  <span id="queue-count" class="badge bg-dark">0 roads</span>
+</div>
+
+<div id="queue-list">
+  <div class="text-center text-muted py-5"><i class="fas fa-spinner fa-spin me-2"></i>Loading…</div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const ACTION_COLORS = {
+  "Immediately — Today": "#7b0000",
+  "Within 7 days":       "#dc3545",
+  "Within 30 days":      "#fd7e14",
+  "Within 90 days":      "#ffc107",
+  "Monitor monthly":     "#28a745",
+};
+
+function loadQueue(){
+  fetch("/api/priority-queue").then(r=>r.json()).then(data=>{
+    document.getElementById("queue-count").textContent = data.length+" roads";
+    const container = document.getElementById("queue-list");
+    if(!data.length){
+      container.innerHTML = '<div class="text-center text-muted py-5"><i class="fas fa-check-circle fa-2x mb-3 text-success"></i><br>No roads detected yet.<br><small>Start a live inspection or load demo data from the dashboard.</small></div>';
+      return;
+    }
+    container.innerHTML = data.map((r,i)=>{
+      const sev     = r.level.toLowerCase();
+      const color   = r.color||"#888";
+      const eco     = r.economic_impact>=100000?"₹"+(r.economic_impact/100000).toFixed(1)+"L":"₹"+r.economic_impact.toLocaleString("en-IN");
+      const actColor= ACTION_COLORS[r.repair_action]||"#888";
+      const rankCls = i<3?`rank-${i+1}`:"";
+      const n_det   = (r.detections||[]).length;
+      const statusOptions = ["pending","in_progress","repaired"].map(s=>
+        `<option value="${s}" ${r.status===s?"selected":""}>${s.replace("_"," ")}</option>`
+      ).join("");
+      return `<div class="queue-item sev-${sev} fade-in">
+        <div class="rank-badge ${rankCls}">${i+1}</div>
+        <div class="queue-main">
+          <div class="queue-road">📍 ${r.road_name}</div>
+          <div class="queue-meta">
+            <span><i class="fas fa-bug me-1"></i>${n_det} defect(s)</span>
+            <span><i class="fas fa-rupee-sign me-1"></i>${eco} risk/30d</span>
+            <span><i class="fas fa-clock me-1"></i>${r.timestamp.substring(0,10)}</span>
+            <span class="badge bg-secondary">${r.source||''}</span>
+          </div>
+          <div class="mt-2" style="font-size:.78rem;color:#888">${r.repair_action}</div>
+        </div>
+        <div class="queue-right">
+          <div class="big-score" style="color:${color}">${r.score}</div>
+          <div style="font-size:.7rem;color:#888">out of 10</div>
+          <span class="action-badge" style="background:${actColor}">${r.level}</span>
+          <div class="mt-2 d-flex gap-1">
+            <select class="form-select form-select-sm" style="font-size:.72rem" onchange="updateStatus('${r.id}',this.value)">
+              ${statusOptions}
+            </select>
+          </div>
+          <div class="mt-1">
+            <a href="/api/report/${r.id}" class="btn btn-sm btn-outline-danger py-0 px-2" style="font-size:.72rem">
+              <i class="fas fa-file-pdf me-1"></i>PDF
+            </a>
+          </div>
+        </div>
+      </div>`;
+    }).join("");
+  }).catch(e=>console.error(e));
+}
+
+function updateStatus(id, status){
+  fetch(`/api/defects/${id}/status`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({status})});
+}
+
+function runBudget(){
+  const budget = parseFloat(document.getElementById("budget-input").value)||0;
+  if(!budget){ alert("Enter a budget amount."); return; }
+  fetch("/api/budget-optimizer",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({budget})})
+    .then(r=>r.json()).then(d=>{
+      const res = document.getElementById("budget-result");
+      res.style.display = "block";
+      if(!d.selected.length){
+        res.innerHTML = '<p style="color:rgba(255,255,255,.7)">Budget too low to fix any road.</p>';
+        return;
+      }
+      const used = d.budget_used>=100000?"₹"+(d.budget_used/100000).toFixed(1)+"L":"₹"+d.budget_used.toLocaleString("en-IN");
+      res.innerHTML = `<p style="font-weight:700;margin-bottom:8px">✅ Fix these ${d.total_roads} road(s) — Total: ${used}</p>
+        <ul style="margin:0;padding-left:18px;font-size:.82rem;opacity:.85">
+          ${d.selected.map(r=>`<li>${r.road_name} — Score ${r.score}/10</li>`).join("")}
+        </ul>
+        <p style="margin-top:10px;font-size:.8rem;opacity:.7">City Health: ${d.old_health} → ${d.estimated_health}/100</p>`;
+    }).catch(e=>console.error(e));
+}
+
+loadQueue();
+setInterval(loadQueue, 15000);
+</script>
+{% endblock %}

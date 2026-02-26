@@ -1,0 +1,254 @@
+{% extends "base.html" %}
+{% block title %}Video Upload — RoadSense AI{% endblock %}
+{% block page_title %}🎬 Batch Video Processing{% endblock %}
+
+{% block head %}
+<style>
+  .upload-zone {
+    border: 3px dashed #ccc; border-radius: 14px; padding: 50px 30px;
+    text-align: center; cursor: pointer; transition: .2s;
+    background: #fafafa;
+  }
+  .upload-zone:hover, .upload-zone.drag-over {
+    border-color: #e94560; background: #fff5f7;
+  }
+  .upload-zone i { font-size: 3rem; color: #ccc; margin-bottom: 14px; }
+  .upload-zone.has-file i { color: #e94560; }
+  .upload-zone.has-file { border-color: #e94560; background: #fff5f7; }
+  .progress-section { display:none; }
+  .result-section { display:none; }
+  .result-item { background:#f8f9fa; border-radius:8px; padding:10px 14px; margin-bottom:8px; font-size:.83rem; border-left:4px solid #ccc; }
+  .result-item.defect { border-left-color: #e94560; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-lg-7">
+    <div class="card mb-4">
+      <div class="card-header py-3 px-4">
+        <i class="fas fa-film me-2 text-danger"></i>Upload Dashcam Video
+      </div>
+      <div class="card-body p-4">
+        <p class="text-muted mb-4" style="font-size:.85rem">Upload a .mp4 dashcam video file recorded while driving. The system will automatically extract one frame every 2 seconds and run AI detection on each frame.</p>
+
+        <!-- Upload Zone -->
+        <div class="upload-zone" id="upload-zone" onclick="document.getElementById('video-file').click()"
+             ondragover="event.preventDefault();this.classList.add('drag-over')"
+             ondragleave="this.classList.remove('drag-over')"
+             ondrop="handleDrop(event)">
+          <i class="fas fa-cloud-upload-alt" id="upload-icon"></i>
+          <div id="upload-text">
+            <p style="font-weight:700;color:#333">Click to select video or drag & drop</p>
+            <p style="color:#aaa;font-size:.8rem">Supports .mp4, .avi, .mov · Max 500MB</p>
+          </div>
+        </div>
+        <input type="file" id="video-file" accept="video/*" style="display:none" onchange="fileSelected(this)"/>
+
+        <!-- Road name + GPS -->
+        <div class="row mt-4 g-3">
+          <div class="col-md-12">
+            <label class="form-label fw-bold" style="font-size:.8rem">Road Name</label>
+            <input type="text" id="vid-road" class="form-control" placeholder="e.g. MG Road" value="MG Road"/>
+          </div>
+          <div class="col-md-5">
+            <label class="form-label fw-bold" style="font-size:.8rem">Latitude</label>
+            <input type="number" id="vid-lat" class="form-control" step="any" value="17.6868"/>
+          </div>
+          <div class="col-md-5">
+            <label class="form-label fw-bold" style="font-size:.8rem">Longitude</label>
+            <input type="number" id="vid-lng" class="form-control" step="any" value="75.9079"/>
+          </div>
+          <div class="col-md-2 d-flex align-items-end">
+            <button type="button" onclick="detectGPS()" class="btn btn-outline-primary w-100" style="font-size:.8rem" title="Auto-detect your current location">
+              <i class="fas fa-location-crosshairs"></i> GPS
+            </button>
+          </div>
+        </div>
+        <div id="gps-feedback" style="margin-top:6px;font-size:.75rem;color:#888">
+          <i class="fas fa-info-circle me-1"></i>
+          Click GPS to auto-fill your current location, or enter coordinates manually.
+          These coordinates will be used as the map marker location for all detections in this video.
+        </div>
+
+        <button id="process-btn" class="btn btn-danger mt-4 w-100 fw-bold py-2" onclick="processVideo()" disabled>
+          <i class="fas fa-cogs me-2"></i>Process Video
+        </button>
+      </div>
+    </div>
+
+    <!-- Progress -->
+    <div class="card mb-4 progress-section" id="progress-section">
+      <div class="card-body p-4">
+        <h6 class="fw-bold mb-3"><i class="fas fa-spinner fa-spin me-2 text-danger"></i>Processing Video…</h6>
+        <div class="progress mb-2" style="height:10px;border-radius:5px">
+          <div id="progress-bar" class="progress-bar bg-danger" role="progressbar" style="width:0%"></div>
+        </div>
+        <small id="progress-text" class="text-muted">Extracting frames and running AI…</small>
+      </div>
+    </div>
+
+    <!-- Results -->
+    <div class="card result-section" id="result-section">
+      <div class="card-header py-3 px-4 fw-bold">
+        <i class="fas fa-poll me-2 text-success"></i>Processing Results
+      </div>
+      <div class="card-body p-4" id="result-body"></div>
+    </div>
+  </div>
+
+  <!-- Right: How it works -->
+  <div class="col-lg-5">
+    <div class="card">
+      <div class="card-header py-3 px-4 fw-bold"><i class="fas fa-info-circle me-2 text-info"></i>How Batch Processing Works</div>
+      <div class="card-body p-4" style="font-size:.84rem;color:#555;line-height:1.8">
+        <div class="d-flex gap-3 mb-3">
+          <div style="width:30px;height:30px;background:#e94560;color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0">1</div>
+          <div><strong>Upload Video</strong><br>Any dashcam .mp4 file recorded while driving on city roads.</div>
+        </div>
+        <div class="d-flex gap-3 mb-3">
+          <div style="width:30px;height:30px;background:#e94560;color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0">2</div>
+          <div><strong>Frame Extraction</strong><br>OpenCV automatically extracts one frame every 2 seconds — same as live inspection.</div>
+        </div>
+        <div class="d-flex gap-3 mb-3">
+          <div style="width:30px;height:30px;background:#e94560;color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0">3</div>
+          <div><strong>AI Analysis</strong><br>YOLOv8 checks each frame for potholes and cracks. Scores are calculated for each detection.</div>
+        </div>
+        <div class="d-flex gap-3 mb-3">
+          <div style="width:30px;height:30px;background:#e94560;color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0">4</div>
+          <div><strong>Results Saved</strong><br>All detections appear on the City Map, Repair Queue, and History automatically.</div>
+        </div>
+        <div class="alert alert-info py-2 mt-3" style="font-size:.78rem">
+          <i class="fas fa-clock me-1"></i>A 10-minute video (300 frames) takes about 2–3 minutes to process.
+        </div>
+        <div class="alert alert-warning py-2" style="font-size:.78rem">
+          <i class="fas fa-map-pin me-1"></i>Note: Since video files don't have GPS, the GPS coordinates you enter above will be used for all detections from this video.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let selectedFile = null;
+
+function fileSelected(input){
+  selectedFile = input.files[0];
+  if(!selectedFile) return;
+  const zone = document.getElementById("upload-zone");
+  zone.classList.add("has-file");
+  document.getElementById("upload-icon").className = "fas fa-check-circle";
+  document.getElementById("upload-text").innerHTML =
+    `<p style="font-weight:700;color:#e94560">✅ ${selectedFile.name}</p>
+     <p style="color:#aaa;font-size:.8rem">${(selectedFile.size/1024/1024).toFixed(1)} MB</p>`;
+  document.getElementById("process-btn").disabled = false;
+}
+
+function handleDrop(e){
+  e.preventDefault();
+  document.getElementById("upload-zone").classList.remove("drag-over");
+  const file = e.dataTransfer.files[0];
+  if(file && file.type.startsWith("video/")){
+    document.getElementById("video-file").files = e.dataTransfer.files;
+    fileSelected({files:[file]});
+  }
+}
+
+function processVideo(){
+  if(!selectedFile){ alert("Please select a video file."); return; }
+  const road = document.getElementById("vid-road").value||"Unknown Road";
+  const lat  = document.getElementById("vid-lat").value||17.6868;
+  const lng  = document.getElementById("vid-lng").value||75.9079;
+
+  const formData = new FormData();
+  formData.append("video", selectedFile);
+  formData.append("road_name", road);
+  formData.append("lat", lat);
+  formData.append("lng", lng);
+
+  // Show progress
+  document.getElementById("progress-section").style.display = "block";
+  document.getElementById("result-section").style.display   = "none";
+  document.getElementById("process-btn").disabled = true;
+
+  // Animate progress (fake progress since we don't have streaming)
+  let prog = 0;
+  const progInterval = setInterval(()=>{
+    prog = Math.min(prog + 2, 90);
+    document.getElementById("progress-bar").style.width = prog+"%";
+    document.getElementById("progress-text").textContent =
+      prog<30?"Uploading video…":prog<60?"Extracting frames…":"Running AI detection…";
+  }, 500);
+
+  fetch("/api/process-video",{method:"POST", body:formData})
+    .then(r=>r.json()).then(d=>{
+      clearInterval(progInterval);
+      document.getElementById("progress-bar").style.width = "100%";
+      setTimeout(()=>{
+        document.getElementById("progress-section").style.display = "none";
+        showResults(d);
+      }, 600);
+    }).catch(err=>{
+      clearInterval(progInterval);
+      document.getElementById("progress-section").style.display = "none";
+      document.getElementById("process-btn").disabled = false;
+      alert("Error processing video: "+err.message);
+    });
+}
+
+function detectGPS(){
+  const btn = document.querySelector('[onclick="detectGPS()"]');
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+  if(!navigator.geolocation){ alert("Geolocation not supported."); return; }
+  navigator.geolocation.getCurrentPosition(pos=>{
+    document.getElementById("vid-lat").value = pos.coords.latitude.toFixed(6);
+    document.getElementById("vid-lng").value = pos.coords.longitude.toFixed(6);
+    document.getElementById("gps-feedback").innerHTML =
+      '<i class="fas fa-check-circle text-success me-1"></i>Location detected: '
+      +pos.coords.latitude.toFixed(4)+', '+pos.coords.longitude.toFixed(4)
+      +' (accuracy: ±'+Math.round(pos.coords.accuracy)+'m)';
+    btn.innerHTML = '<i class="fas fa-check text-success"></i>';
+  }, err=>{
+    document.getElementById("gps-feedback").innerHTML =
+      '<i class="fas fa-exclamation-triangle text-warning me-1"></i>Could not get location — enter manually.';
+    btn.innerHTML = '<i class="fas fa-location-crosshairs"></i> GPS';
+  }, {enableHighAccuracy:true, timeout:8000});
+}
+
+function showResults(d){
+  const section = document.getElementById("result-section");
+  const body    = document.getElementById("result-body");
+  section.style.display = "block";
+
+  const found = d.defects_found||0;
+  body.innerHTML = `
+    <div class="row g-3 mb-4">
+      <div class="col-4 text-center">
+        <div style="font-size:2rem;font-weight:900;color:#1a1a2e">${d.frames_analyzed||0}</div>
+        <div style="font-size:.75rem;color:#888">Frames Analyzed</div>
+      </div>
+      <div class="col-4 text-center">
+        <div style="font-size:2rem;font-weight:900;color:#e94560">${found}</div>
+        <div style="font-size:.75rem;color:#888">Defects Found</div>
+      </div>
+      <div class="col-4 text-center">
+        <div style="font-size:2rem;font-weight:900;color:#28a745">${d.city_health||'—'}</div>
+        <div style="font-size:.75rem;color:#888">City Health Score</div>
+      </div>
+    </div>
+    <hr/>
+    <p class="fw-bold mb-3" style="font-size:.85rem">Detection Events:</p>
+    ${(d.results||[]).length?d.results.map(r=>`
+      <div class="result-item defect">
+        <strong>Frame ${r.frame}</strong> — Score: ${r.score}/10 — Level: ${r.level}
+      </div>`).join(""):'<div class="result-item">No defects detected in this video.</div>'}
+    <div class="d-flex gap-2 mt-4 flex-wrap">
+      <a href="/city-map" class="btn btn-dark"><i class="fas fa-map me-1"></i>View on City Map</a>
+      <a href="/repair-queue" class="btn btn-danger"><i class="fas fa-list me-1"></i>View Repair Queue</a>
+      <a href="/history" class="btn btn-outline-secondary"><i class="fas fa-history me-1"></i>View History</a>
+    </div>`;
+}
+</script>
+{% endblock %}

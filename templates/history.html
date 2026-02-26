@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block title %}History — RoadSense AI{% endblock %}
+{% block page_title %}📁 Inspection History{% endblock %}
+
+{% block head %}
+<style>
+  .filter-bar { background:#fff; border-radius:12px; padding:16px 20px; margin-bottom:20px; display:flex; flex-wrap:wrap; gap:12px; align-items:center; box-shadow:0 2px 10px rgba(0,0,0,.06); }
+  .hist-card { background:#fff; border-radius:12px; padding:0; box-shadow:0 2px 10px rgba(0,0,0,.07); margin-bottom:12px; overflow:hidden; }
+  .hist-card-header { padding:14px 18px; display:flex; align-items:center; gap:14px; cursor:pointer; }
+  .hist-card-header:hover { background:#fafafa; }
+  .hist-card-body { display:none; padding:16px 18px; border-top:1px solid #f0f0f0; }
+  .hist-road { font-weight:800; font-size:.9rem; color:#1a1a2e; }
+  .hist-meta { font-size:.75rem; color:#888; margin-top:2px; }
+  .det-chip { display:inline-block; background:#f0f2f5; border-radius:6px; padding:4px 10px; font-size:.75rem; margin:2px; }
+  .det-chip.pothole { background:#ffe5e5; color:#c0392b; }
+  .det-chip.crack    { background:#fff3cd; color:#856404; }
+  .img-thumb { width:100%; max-width:300px; border-radius:8px; margin-top:8px; }
+  .no-data { text-align:center; padding:60px 20px; color:#aaa; }
+  .no-data i { font-size:3rem; margin-bottom:16px; display:block; }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Filters -->
+<div class="filter-bar">
+  <input type="text" id="search-input" class="form-control" style="max-width:240px" placeholder="🔍 Search road name…" oninput="loadHistory()"/>
+  <select id="level-filter" class="form-select" style="max-width:160px" onchange="loadHistory()">
+    <option value="">All Levels</option>
+    <option>Emergency</option>
+    <option>Critical</option>
+    <option>Severe</option>
+    <option>Moderate</option>
+    <option>Good</option>
+  </select>
+  <select id="source-filter" class="form-select" style="max-width:150px" onchange="loadHistory()">
+    <option value="">All Sources</option>
+    <option>webcam</option>
+    <option>citizen</option>
+    <option>video</option>
+    <option>demo</option>
+  </select>
+  <span id="hist-count" class="badge bg-dark ms-auto">0 records</span>
+</div>
+
+<!-- List -->
+<div id="hist-list">
+  <div class="no-data"><i class="fas fa-spinner fa-spin"></i>Loading…</div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleCard(id){
+  const body = document.getElementById("body-"+id);
+  body.style.display = body.style.display==="block"?"none":"block";
+}
+
+function loadHistory(){
+  const q      = document.getElementById("search-input").value;
+  const level  = document.getElementById("level-filter").value;
+  const source = document.getElementById("source-filter").value;
+  let url = `/api/defects?q=${encodeURIComponent(q)}&level=${encodeURIComponent(level)}`;
+
+  fetch(url).then(r=>r.json()).then(data=>{
+    let d = data;
+    if(source) d = d.filter(r=>(r.source||"")===source);
+    document.getElementById("hist-count").textContent = d.length+" records";
+
+    const list = document.getElementById("hist-list");
+    if(!d.length){
+      list.innerHTML = `<div class="no-data"><i class="fas fa-search"></i>No records found.<br><small>Try a different filter or start an inspection.</small></div>`;
+      return;
+    }
+
+    list.innerHTML = d.map(r=>{
+      const ts    = r.timestamp.replace("T"," ").substring(0,16);
+      const eco   = r.economic_impact>=100000?"₹"+(r.economic_impact/100000).toFixed(1)+"L":"₹"+r.economic_impact.toLocaleString("en-IN");
+      const color = r.color||"#888";
+      const chips = (r.detections||[]).map(det=>{
+        const cls = (det.label||"").toLowerCase().includes("pothole")?"pothole":"crack";
+        return `<span class="det-chip ${cls}">${det.label||det.class} ${det.confidence?Math.round(det.confidence*100)+"%":""}</span>`;
+      }).join("");
+      const statusOpts = ["pending","in_progress","repaired"].map(s=>
+        `<option value="${s}" ${r.status===s?"selected":""}>${s.replace("_"," ")}</option>`
+      ).join("");
+      return `<div class="hist-card fade-in">
+        <div class="hist-card-header" onclick="toggleCard('${r.id}')">
+          <span style="width:12px;height:12px;border-radius:50%;background:${color};flex-shrink:0;display:inline-block"></span>
+          <div style="flex:1">
+            <div class="hist-road">${r.road_name}</div>
+            <div class="hist-meta">${ts} · ${r.source||''} · GPS: ${r.lat},${r.lng}</div>
+          </div>
+          <span style="background:${color};color:#fff;padding:3px 10px;border-radius:12px;font-weight:700;font-size:.8rem">${r.score}/10</span>
+          <span class="badge bg-secondary ms-2">${r.level}</span>
+          <i class="fas fa-chevron-down ms-2 text-muted"></i>
+        </div>
+        <div class="hist-card-body" id="body-${r.id}">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <p class="mb-1"><b>Repair Action:</b> ${r.repair_action}</p>
+              <p class="mb-1"><b>Economic Risk:</b> ${eco}/30 days</p>
+              <p class="mb-2"><b>Defects:</b></p>
+              <div>${chips||'<span class="text-muted">No defects annotated</span>'}</div>
+              <div class="mt-3 d-flex gap-2 flex-wrap align-items-center">
+                <select class="form-select form-select-sm" style="max-width:160px" onchange="updateStatus('${r.id}',this.value)">
+                  ${statusOpts}
+                </select>
+                <a href="/api/report/${r.id}" class="btn btn-sm btn-danger"><i class="fas fa-file-pdf me-1"></i>Download PDF</a>
+              </div>
+            </div>
+            <div class="col-md-6">
+              ${r.annotated_img?`<img class="img-thumb" src="${r.annotated_img}" onerror="this.style.display='none'" alt="Annotated"/>`:`<div class="text-muted" style="font-size:.8rem">No annotated image available.</div>`}
+            </div>
+          </div>
+        </div>
+      </div>`;
+    }).join("");
+  }).catch(e=>console.error(e));
+}
+
+function updateStatus(id,status){
+  fetch(`/api/defects/${id}/status`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({status})});
+}
+
+loadHistory();
+setInterval(loadHistory, 20000);
+</script>
+{% endblock %}

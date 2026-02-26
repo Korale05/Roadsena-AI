@@ -1,0 +1,1014 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>RoadSense AI — Road Inspector</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+<style>
+  /* ── RESET & BASE ─────────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #080e1a;
+    --surface:   #0d1525;
+    --surface2:  #111e30;
+    --border:    #1a2d45;
+    --border2:   #243548;
+    --text:      #e8f0fe;
+    --muted:     #4a6080;
+    --accent:    #2563eb;
+    --accent2:   #1d4ed8;
+    --green:     #10b981;
+    --yellow:    #f59e0b;
+    --orange:    #f97316;
+    --red:       #ef4444;
+    --darkred:   #b91c1c;
+    --glow:      rgba(37,99,235,0.15);
+  }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── GRID BACKGROUND ──────────────────────────────────────── */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(37,99,235,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(37,99,235,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ── LAYOUT ───────────────────────────────────────────────── */
+  .wrap {
+    position: relative;
+    z-index: 1;
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 0 24px 80px;
+  }
+
+  /* ── HEADER ───────────────────────────────────────────────── */
+  header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 28px 0 36px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 40px;
+    position: relative;
+  }
+
+  header::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: 0;
+    width: 120px;
+    height: 2px;
+    background: linear-gradient(90deg, var(--accent), transparent);
+  }
+
+  .logo-icon {
+    width: 48px;
+    height: 48px;
+    background: linear-gradient(135deg, #1a3a6e, #0d1f42);
+    border: 1px solid var(--border2);
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    box-shadow: 0 0 20px rgba(37,99,235,0.2);
+    flex-shrink: 0;
+  }
+
+  .logo-text h1 {
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: 22px;
+    letter-spacing: -0.5px;
+    color: var(--text);
+  }
+
+  .logo-text p {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 2px;
+    font-family: 'DM Mono', monospace;
+    letter-spacing: 0.5px;
+  }
+
+  .header-badge {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(16,185,129,0.08);
+    border: 1px solid rgba(16,185,129,0.2);
+    padding: 6px 14px;
+    border-radius: 100px;
+    font-size: 12px;
+    color: var(--green);
+    font-family: 'DM Mono', monospace;
+  }
+
+  .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--green);
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%,100% { opacity:1; transform:scale(1); }
+    50%      { opacity:0.4; transform:scale(1.5); }
+  }
+
+  /* ── MAIN GRID ────────────────────────────────────────────── */
+  .main-grid {
+    display: grid;
+    grid-template-columns: 420px 1fr;
+    gap: 24px;
+    align-items: start;
+  }
+
+  @media(max-width:820px) {
+    .main-grid { grid-template-columns: 1fr; }
+  }
+
+  /* ── CARDS ────────────────────────────────────────────────── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 28px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(37,99,235,0.4), transparent);
+  }
+
+  .card-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .card-title span { font-size: 16px; }
+
+  /* ── UPLOAD ZONE ──────────────────────────────────────────── */
+  .upload-zone {
+    border: 2px dashed var(--border2);
+    border-radius: 16px;
+    padding: 32px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.25s;
+    position: relative;
+    overflow: hidden;
+    background: var(--surface2);
+    min-height: 180px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+  }
+
+  .upload-zone:hover, .upload-zone.drag-over {
+    border-color: var(--accent);
+    background: rgba(37,99,235,0.05);
+    box-shadow: 0 0 30px rgba(37,99,235,0.1);
+  }
+
+  .upload-zone input[type=file] {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+    width: 100%;
+    height: 100%;
+  }
+
+  .upload-icon {
+    width: 56px; height: 56px;
+    background: linear-gradient(135deg, rgba(37,99,235,0.2), rgba(37,99,235,0.05));
+    border: 1px solid rgba(37,99,235,0.3);
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    flex-shrink: 0;
+  }
+
+  .upload-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  .upload-sub {
+    font-size: 12px;
+    color: var(--muted);
+    font-family: 'DM Mono', monospace;
+  }
+
+  /* Preview image inside upload zone */
+  #preview-img {
+    display: none;
+    width: 100%;
+    max-height: 200px;
+    object-fit: contain;
+    border-radius: 10px;
+    border: 1px solid var(--border2);
+  }
+
+  /* ── FORM FIELDS ──────────────────────────────────────────── */
+  .field-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-top: 16px;
+  }
+
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field.full { grid-column: 1 / -1; }
+
+  label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-family: 'DM Mono', monospace;
+  }
+
+  input[type=text], input[type=number] {
+    background: var(--surface2);
+    border: 1px solid var(--border2);
+    border-radius: 10px;
+    padding: 10px 14px;
+    color: var(--text);
+    font-size: 14px;
+    font-family: 'DM Sans', sans-serif;
+    outline: none;
+    transition: border-color 0.2s;
+    width: 100%;
+  }
+
+  input[type=text]:focus, input[type=number]:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(37,99,235,0.1);
+  }
+
+  /* ── BUTTONS ──────────────────────────────────────────────── */
+  .btn-analyze {
+    width: 100%;
+    margin-top: 20px;
+    padding: 14px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    color: #fff;
+    border: none;
+    border-radius: 12px;
+    font-size: 15px;
+    font-weight: 700;
+    font-family: 'Syne', sans-serif;
+    cursor: pointer;
+    transition: all 0.2s;
+    letter-spacing: 0.3px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .btn-analyze::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(255,255,255,0.1), transparent);
+  }
+
+  .btn-analyze:hover { transform: translateY(-1px); box-shadow: 0 8px 24px rgba(37,99,235,0.4); }
+  .btn-analyze:disabled { background: var(--border2); color: var(--muted); cursor: not-allowed; transform: none; box-shadow: none; }
+
+  /* ── LOADING STATE ────────────────────────────────────────── */
+  .loading-bar {
+    display: none;
+    height: 3px;
+    background: var(--border);
+    border-radius: 3px;
+    margin-top: 16px;
+    overflow: hidden;
+  }
+
+  .loading-bar.show { display: block; }
+
+  .loading-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), #60a5fa, var(--accent));
+    background-size: 200% 100%;
+    animation: shimmer 1.5s linear infinite;
+    border-radius: 3px;
+    width: 100%;
+  }
+
+  @keyframes shimmer {
+    0%   { background-position: 200% center; }
+    100% { background-position: -200% center; }
+  }
+
+  /* ── RESULTS PANEL ────────────────────────────────────────── */
+  #results-panel { display: none; }
+  #results-panel.show {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    animation: fadeUp 0.5s ease forwards;
+  }
+
+  @keyframes fadeUp {
+    from { opacity:0; transform:translateY(20px); }
+    to   { opacity:1; transform:translateY(0); }
+  }
+
+  /* ── ANNOTATED IMAGE ──────────────────────────────────────── */
+  .result-image-wrap {
+    position: relative;
+    border-radius: 16px;
+    overflow: hidden;
+    border: 1px solid var(--border2);
+    background: #000;
+  }
+
+  .result-image-wrap img {
+    width: 100%;
+    display: block;
+    max-height: 380px;
+    object-fit: contain;
+  }
+
+  .image-overlay-badge {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    background: rgba(8,14,26,0.85);
+    backdrop-filter: blur(8px);
+    border: 1px solid var(--border2);
+    border-radius: 8px;
+    padding: 6px 12px;
+    font-size: 12px;
+    font-family: 'DM Mono', monospace;
+    color: var(--green);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  /* ── SCORE STRIP ──────────────────────────────────────────── */
+  .score-strip {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 12px;
+  }
+
+  .score-box {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 16px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .score-box .val {
+    font-family: 'Syne', sans-serif;
+    font-size: 28px;
+    font-weight: 800;
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+
+  .score-box .lbl {
+    font-size: 10px;
+    color: var(--muted);
+    font-family: 'DM Mono', monospace;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+  }
+
+  /* ── SEVERITY BANNER ──────────────────────────────────────── */
+  .severity-banner {
+    border-radius: 14px;
+    padding: 20px 24px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    border: 1px solid;
+  }
+
+  .severity-big {
+    font-family: 'Syne', sans-serif;
+    font-size: 48px;
+    font-weight: 800;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+
+  .severity-info { flex: 1; }
+
+  .severity-level {
+    font-family: 'Syne', sans-serif;
+    font-size: 20px;
+    font-weight: 800;
+    margin-bottom: 4px;
+  }
+
+  .severity-urgency {
+    font-size: 13px;
+    opacity: 0.8;
+  }
+
+  .severity-impact {
+    text-align: right;
+    flex-shrink: 0;
+  }
+
+  .severity-impact .label {
+    font-size: 10px;
+    font-family: 'DM Mono', monospace;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    opacity: 0.6;
+    margin-bottom: 4px;
+  }
+
+  .severity-impact .amount {
+    font-family: 'Syne', sans-serif;
+    font-size: 18px;
+    font-weight: 800;
+  }
+
+  /* ── DEFECT LIST ──────────────────────────────────────────── */
+  .defect-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .defect-item {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .defect-num {
+    width: 28px; height: 28px;
+    border-radius: 8px;
+    background: rgba(37,99,235,0.15);
+    border: 1px solid rgba(37,99,235,0.25);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    color: #60a5fa;
+    flex-shrink: 0;
+  }
+
+  .defect-info { flex: 1; }
+
+  .defect-type {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 2px;
+  }
+
+  .defect-meta {
+    font-size: 11px;
+    color: var(--muted);
+    font-family: 'DM Mono', monospace;
+  }
+
+  .defect-conf {
+    font-family: 'DM Mono', monospace;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--green);
+  }
+
+  .conf-bar {
+    width: 80px;
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-top: 4px;
+  }
+
+  .conf-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--green));
+    border-radius: 2px;
+    transition: width 0.8s ease;
+  }
+
+  /* ── EMPTY / ERROR STATE ──────────────────────────────────── */
+  .empty-state {
+    text-align: center;
+    padding: 60px 24px;
+    color: var(--muted);
+  }
+
+  .empty-icon { font-size: 48px; margin-bottom: 16px; opacity: 0.4; }
+
+  .empty-state h3 {
+    font-family: 'Syne', sans-serif;
+    font-size: 16px;
+    color: var(--text);
+    margin-bottom: 8px;
+    opacity: 0.5;
+  }
+
+  .empty-state p { font-size: 13px; }
+
+  /* ── COLOR HELPERS ────────────────────────────────────────── */
+  .c-green   { color: var(--green)  !important; }
+  .c-yellow  { color: var(--yellow) !important; }
+  .c-orange  { color: var(--orange) !important; }
+  .c-red     { color: var(--red)    !important; }
+  .c-darkred { color: #fca5a5       !important; }
+  .c-blue    { color: #60a5fa       !important; }
+
+  .bg-green   { background: rgba(16,185,129,0.08)  !important; border-color: rgba(16,185,129,0.25)  !important; }
+  .bg-yellow  { background: rgba(245,158,11,0.08)  !important; border-color: rgba(245,158,11,0.25)  !important; }
+  .bg-orange  { background: rgba(249,115,22,0.08)  !important; border-color: rgba(249,115,22,0.25)  !important; }
+  .bg-red     { background: rgba(239,68,68,0.08)   !important; border-color: rgba(239,68,68,0.25)   !important; }
+  .bg-darkred { background: rgba(185,28,28,0.12)   !important; border-color: rgba(185,28,28,0.35)   !important; }
+
+  /* ── NO-DATA PLACEHOLDER ──────────────────────────────────── */
+  #placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    min-height: 400px;
+    text-align: center;
+    gap: 16px;
+    color: var(--muted);
+  }
+
+  .placeholder-icon {
+    width: 80px; height: 80px;
+    background: var(--surface2);
+    border: 2px dashed var(--border2);
+    border-radius: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 32px;
+    opacity: 0.5;
+  }
+
+  #placeholder h3 {
+    font-family: 'Syne', sans-serif;
+    font-size: 15px;
+    color: var(--text);
+    opacity: 0.3;
+  }
+
+  #placeholder p { font-size: 13px; opacity: 0.4; max-width: 220px; line-height: 1.6; }
+
+  /* ── SECTION DIVIDER ──────────────────────────────────────── */
+  .section-divider {
+    font-size: 11px;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-family: 'DM Mono', monospace;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  .section-divider::before,
+  .section-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  /* ── TOAST ────────────────────────────────────────────────── */
+  #toast {
+    position: fixed;
+    bottom: 32px;
+    right: 32px;
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    border-radius: 14px;
+    padding: 14px 20px;
+    font-size: 14px;
+    font-weight: 500;
+    display: none;
+    align-items: center;
+    gap: 10px;
+    z-index: 9999;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+    animation: slideIn 0.3s ease;
+    max-width: 320px;
+  }
+
+  @keyframes slideIn {
+    from { transform: translateY(20px); opacity: 0; }
+    to   { transform: translateY(0);    opacity: 1; }
+  }
+</style>
+</head>
+
+<body>
+<div class="wrap">
+
+  <!-- ── HEADER ── -->
+  <header>
+    <div class="logo-icon">🛣️</div>
+    <div class="logo-text">
+      <h1>RoadSense AI</h1>
+      <p>INTELLIGENT ROAD INSPECTION SYSTEM</p>
+    </div>
+    <div class="header-badge">
+      <div class="dot"></div>
+      MODEL ACTIVE
+    </div>
+  </header>
+
+  <!-- ── MAIN GRID ── -->
+  <div class="main-grid">
+
+    <!-- LEFT: Upload Panel -->
+    <div style="display:flex;flex-direction:column;gap:20px;">
+
+      <!-- Upload Card -->
+      <div class="card">
+        <div class="card-title"><span>📷</span> Upload Road Image</div>
+
+        <div class="upload-zone" id="drop-zone">
+          <input type="file" id="file-input" accept="image/*"/>
+          <img id="preview-img" alt="preview"/>
+          <div id="upload-placeholder">
+            <div class="upload-icon">📸</div>
+            <div class="upload-title">Drop image or click to browse</div>
+            <div class="upload-sub">JPG · PNG · WEBP supported</div>
+          </div>
+        </div>
+
+        <!-- Form Fields -->
+        <div class="field-row">
+          <div class="field full">
+            <label>Road Name / Location</label>
+            <input type="text" id="road-name" placeholder="e.g. MG Road, Solapur"/>
+          </div>
+          <div class="field">
+            <label>Latitude</label>
+            <input type="number" id="lat" value="17.6868" step="0.0001"/>
+          </div>
+          <div class="field">
+            <label>Longitude</label>
+            <input type="number" id="lng" value="75.9091" step="0.0001"/>
+          </div>
+        </div>
+
+        <!-- GPS Button -->
+        <button onclick="getGPS()" style="
+          margin-top:12px; width:100%; padding:9px;
+          background:transparent; border:1px solid var(--border2);
+          border-radius:10px; color:var(--muted); font-size:13px;
+          cursor:pointer; transition:all 0.2s; font-family:'DM Sans',sans-serif;
+        " onmouseover="this.style.borderColor='#2563eb';this.style.color='#60a5fa'"
+           onmouseout="this.style.borderColor='var(--border2)';this.style.color='var(--muted)'">
+          📍 Auto-detect my GPS location
+        </button>
+
+        <!-- Analyze Button -->
+        <button class="btn-analyze" id="analyze-btn" onclick="analyze()" disabled>
+          🔍 Run AI Inspection
+        </button>
+
+        <!-- Loading Bar -->
+        <div class="loading-bar" id="loading-bar">
+          <div class="loading-bar-fill"></div>
+        </div>
+
+        <!-- Status text -->
+        <p id="status-text" style="
+          text-align:center; font-size:12px; color:var(--muted);
+          margin-top:10px; font-family:'DM Mono',monospace; min-height:16px;
+        "></p>
+      </div>
+
+      <!-- Instructions Card -->
+      <div class="card" style="padding:20px 24px;">
+        <div class="card-title"><span>ℹ️</span> How It Works</div>
+        <div style="display:flex;flex-direction:column;gap:12px;">
+          <div style="display:flex;gap:12px;align-items:flex-start;">
+            <div style="width:24px;height:24px;background:rgba(37,99,235,0.15);border:1px solid rgba(37,99,235,0.3);border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;">1</div>
+            <div style="font-size:13px;color:#94a3b8;line-height:1.5;">Upload any road photo from your phone or computer</div>
+          </div>
+          <div style="display:flex;gap:12px;align-items:flex-start;">
+            <div style="width:24px;height:24px;background:rgba(37,99,235,0.15);border:1px solid rgba(37,99,235,0.3);border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;">2</div>
+            <div style="font-size:13px;color:#94a3b8;line-height:1.5;">YOLOv8 AI detects potholes and cracks in milliseconds</div>
+          </div>
+          <div style="display:flex;gap:12px;align-items:flex-start;">
+            <div style="width:24px;height:24px;background:rgba(37,99,235,0.15);border:1px solid rgba(37,99,235,0.3);border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;">3</div>
+            <div style="font-size:13px;color:#94a3b8;line-height:1.5;">See the annotated image with bounding boxes + severity score</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- RIGHT: Results Panel -->
+    <div class="card" style="min-height:500px;display:flex;flex-direction:column;">
+      <div class="card-title"><span>🤖</span> AI Analysis Results</div>
+
+      <!-- Placeholder when no results yet -->
+      <div id="placeholder">
+        <div class="placeholder-icon">🔬</div>
+        <h3>Awaiting Inspection</h3>
+        <p>Upload a road image and click "Run AI Inspection" to see results here.</p>
+      </div>
+
+      <!-- Results (hidden until analysis done) -->
+      <div id="results-panel">
+
+        <!-- Annotated Image -->
+        <div class="result-image-wrap">
+          <img id="result-img" src="" alt="AI annotated image"/>
+          <div class="image-overlay-badge">
+            <div class="dot"></div>
+            <span id="defect-count-badge">0 DEFECTS DETECTED</span>
+          </div>
+        </div>
+
+        <!-- Severity Banner -->
+        <div class="severity-banner" id="severity-banner">
+          <div class="severity-big" id="sev-score">–</div>
+          <div class="severity-info">
+            <div class="severity-level" id="sev-level">–</div>
+            <div class="severity-urgency" id="sev-urgency">–</div>
+            <div style="margin-top:8px;font-size:12px;opacity:0.6;">
+              Road Quality Index: <b id="rqi">–</b>/100
+            </div>
+          </div>
+          <div class="severity-impact">
+            <div class="label">Cost if ignored<br/>30 days</div>
+            <div class="amount" id="economic">–</div>
+          </div>
+        </div>
+
+        <!-- Score Strip -->
+        <div class="score-strip">
+          <div class="score-box">
+            <div class="val c-blue" id="s-severity">–</div>
+            <div class="lbl">Severity Score</div>
+          </div>
+          <div class="score-box">
+            <div class="val" id="s-quality">–</div>
+            <div class="lbl">Road Quality</div>
+          </div>
+          <div class="score-box">
+            <div class="val" id="s-defects">–</div>
+            <div class="lbl">Defects Found</div>
+          </div>
+        </div>
+
+        <!-- Defect Breakdown -->
+        <div>
+          <div class="section-divider">Detected Defects</div>
+          <div class="defect-list" id="defect-list"></div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Toast notification -->
+<div id="toast"></div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<script>
+const BACKEND = 'http://localhost:5000'
+
+const COLOR = {
+  green:   { text:'#10b981', cls:'c-green',   bg:'bg-green'   },
+  yellow:  { text:'#f59e0b', cls:'c-yellow',  bg:'bg-yellow'  },
+  orange:  { text:'#f97316', cls:'c-orange',  bg:'bg-orange'  },
+  red:     { text:'#ef4444', cls:'c-red',     bg:'bg-red'     },
+  darkred: { text:'#fca5a5', cls:'c-darkred', bg:'bg-darkred' },
+}
+
+// ── FILE SELECTION ──────────────────────────────────────────────────────────
+const fileInput   = document.getElementById('file-input')
+const dropZone    = document.getElementById('drop-zone')
+const previewImg  = document.getElementById('preview-img')
+const placeholder = document.getElementById('upload-placeholder')
+const analyzeBtn  = document.getElementById('analyze-btn')
+
+fileInput.addEventListener('change', e => showPreview(e.target.files[0]))
+
+dropZone.addEventListener('dragover',  e => { e.preventDefault(); dropZone.classList.add('drag-over') })
+dropZone.addEventListener('dragleave', ()=> dropZone.classList.remove('drag-over'))
+dropZone.addEventListener('drop', e => {
+  e.preventDefault()
+  dropZone.classList.remove('drag-over')
+  const f = e.dataTransfer.files[0]
+  if (f && f.type.startsWith('image/')) { fileInput.files = e.dataTransfer.files; showPreview(f) }
+})
+
+function showPreview(file) {
+  if (!file) return
+  const reader = new FileReader()
+  reader.onload = e => {
+    previewImg.src = e.target.result
+    previewImg.style.display = 'block'
+    placeholder.style.display = 'none'
+    analyzeBtn.disabled = false
+    toast('Image loaded — ready to analyze ✓', '#10b981')
+  }
+  reader.readAsDataURL(file)
+}
+
+// ── GPS ─────────────────────────────────────────────────────────────────────
+function getGPS() {
+  if (!navigator.geolocation) return toast('GPS not supported in this browser', '#ef4444')
+  toast('Getting your location...', '#60a5fa')
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      document.getElementById('lat').value = pos.coords.latitude.toFixed(4)
+      document.getElementById('lng').value = pos.coords.longitude.toFixed(4)
+      toast('📍 Location captured!', '#10b981')
+    },
+    () => toast('Could not get GPS — enter manually', '#f59e0b')
+  )
+}
+
+// ── ANALYZE ─────────────────────────────────────────────────────────────────
+async function analyze() {
+  const file = fileInput.files[0]
+  if (!file) return toast('Please select an image first', '#ef4444')
+
+  // UI: loading state
+  analyzeBtn.disabled = true
+  analyzeBtn.textContent = '🔍 AI Analyzing...'
+  document.getElementById('loading-bar').classList.add('show')
+  setStatus('Sending image to AI model...')
+
+  const form = new FormData()
+  form.append('file',      file)
+  form.append('lat',       document.getElementById('lat').value || '17.6868')
+  form.append('lng',       document.getElementById('lng').value || '75.9091')
+  form.append('road_name', document.getElementById('road-name').value || 'Unknown Road')
+
+  try {
+    setStatus('Running YOLOv8 detection...')
+    const res  = await fetch(`${BACKEND}/api/upload-image`, { method:'POST', body:form })
+    const data = await res.json()
+
+    if (!data.success) throw new Error(data.error || 'Unknown error')
+
+    setStatus('Detection complete ✓')
+    showResults(data.data)
+    toast('✅ AI analysis complete!', '#10b981')
+  } catch(err) {
+    toast(`❌ Error: ${err.message}`, '#ef4444')
+    setStatus('Error — check if Flask backend is running on port 5000')
+  }
+
+  // UI: reset loading
+  analyzeBtn.disabled = false
+  analyzeBtn.textContent = '🔍 Run AI Inspection'
+  document.getElementById('loading-bar').classList.remove('show')
+}
+
+// ── SHOW RESULTS ─────────────────────────────────────────────────────────────
+function showResults(data) {
+  const s = data.score
+  const c = COLOR[s.color] || COLOR.green
+
+  // 1. Show the annotated image (YOLOv8 output with boxes drawn)
+  const imgUrl = `${BACKEND}/outputs/${data.annotated_image}`
+  document.getElementById('result-img').src = imgUrl + '?t=' + Date.now()
+
+  // 2. Badge on image
+  document.getElementById('defect-count-badge').textContent =
+    `${s.defect_count} DEFECT${s.defect_count !== 1 ? 'S' : ''} DETECTED`
+
+  // 3. Severity banner
+  const banner = document.getElementById('severity-banner')
+  banner.className = `severity-banner ${c.bg}`
+  document.getElementById('sev-score').className   = `severity-big ${c.cls}`
+  document.getElementById('sev-score').textContent = `${s.severity_score}/10`
+  document.getElementById('sev-level').className   = `severity-level ${c.cls}`
+  document.getElementById('sev-level').textContent = s.severity_level
+  document.getElementById('sev-urgency').textContent = `⚠ ${s.repair_urgency}`
+  document.getElementById('rqi').textContent = s.road_quality_index
+  document.getElementById('economic').textContent = `₹${s.economic_impact_rs.toLocaleString('en-IN')}`
+  document.getElementById('economic').className = `amount ${c.cls}`
+
+  // 4. Score strip
+  document.getElementById('s-severity').textContent = `${s.severity_score}/10`
+  document.getElementById('s-severity').className   = `val ${c.cls}`
+  document.getElementById('s-quality').textContent  = `${s.road_quality_index}/100`
+  document.getElementById('s-defects').textContent  = s.defect_count
+
+  // 5. Defect breakdown list
+  const list = document.getElementById('defect-list')
+  list.innerHTML = ''
+
+  if (data.detections.length === 0) {
+    list.innerHTML = `
+      <div style="text-align:center;padding:24px;color:var(--green);font-size:14px;">
+        ✅ No road damage detected — Road is in good condition
+      </div>`
+  } else {
+    data.detections.forEach((d, i) => {
+      const sizeLabel = d.size_ratio > 0.06 ? 'Large' : d.size_ratio > 0.02 ? 'Medium' : 'Small'
+      list.innerHTML += `
+        <div class="defect-item">
+          <div class="defect-num">${i+1}</div>
+          <div class="defect-info">
+            <div class="defect-type">${d.type}</div>
+            <div class="defect-meta">
+              ${sizeLabel} · Class: ${d.class_id} · Area: ${(d.size_ratio*100).toFixed(1)}% of image
+            </div>
+            <div class="conf-bar">
+              <div class="conf-bar-fill" style="width:${d.confidence}%"></div>
+            </div>
+          </div>
+          <div style="text-align:right;">
+            <div class="defect-conf">${d.confidence}%</div>
+            <div style="font-size:10px;color:var(--muted);font-family:'DM Mono',monospace;margin-top:2px;">CONF</div>
+          </div>
+        </div>`
+    })
+  }
+
+  // 6. Show results panel, hide placeholder
+  document.getElementById('placeholder').style.display = 'none'
+  const panel = document.getElementById('results-panel')
+  panel.classList.add('show')
+}
+
+// ── HELPERS ──────────────────────────────────────────────────────────────────
+function setStatus(msg) {
+  document.getElementById('status-text').textContent = msg
+}
+
+function toast(msg, color='#10b981') {
+  const t = document.getElementById('toast')
+  t.innerHTML = `<span style="font-size:18px;">${msg.startsWith('✅')||msg.startsWith('📍') ? '' : msg.startsWith('❌') ? '' : '💬'}</span> ${msg}`
+  t.style.cssText += `display:flex; border-color:${color}22; color:${color};`
+  setTimeout(() => t.style.display='none', 3500)
+}
+
+// ── ENTER KEY ──────────────────────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !analyzeBtn.disabled) analyze()
+})
+</script>
+</body>
+</html>
