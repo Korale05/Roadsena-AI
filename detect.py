@@ -8,6 +8,9 @@ model = YOLO(
     r"D:\Pathhole_Detection\YOLOv8_Pothole_Segmentation_Road_Damage_Assessment\model\best.pt"
 )
 
+model = YOLO(
+    r"D:\Pathhole_Detection\RoadDamageDetection\models\YOLOv8_Small_RDD.pt"
+)
 
 # The 4 damage classes this model knows
 DAMAGE_CLASSES = {
@@ -53,5 +56,5 @@ def detect_damage(image_path):
 
 det = []
 
-img_path = r"upload\path2.jpg"
+img_path = r"upload\ali3.jpg"
 det , path = detect_damage(image_path=img_path)

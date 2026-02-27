@@ -90,14 +90,14 @@ officers_db     = {   # Hard-coded officers (no DB needed for hackathon)
 
 # ─── Damage Constants ────────────────────────────────────────────────────────
 DAMAGE_CONFIG = {
-    "pothole":            {"base": 9, "label": "Pothole",            "repair_cost": 25000},
-    "D40":                {"base": 9, "label": "Pothole",            "repair_cost": 25000},
-    "alligator_crack":    {"base": 7, "label": "Alligator Crack",    "repair_cost": 15000},
-    "D20":                {"base": 7, "label": "Alligator Crack",    "repair_cost": 15000},
-    "transverse_crack":   {"base": 5, "label": "Transverse Crack",   "repair_cost":  8000},
-    "D10":                {"base": 5, "label": "Transverse Crack",   "repair_cost":  8000},
-    "longitudinal_crack": {"base": 3, "label": "Longitudinal Crack", "repair_cost":  5000},
-    "D00":                {"base": 3, "label": "Longitudinal Crack", "repair_cost":  5000},
+    "pothole":            {"base": 5.0, "label": "Pothole",            "repair_cost": 5500},
+    "D40":                {"base": 5.0, "label": "Pothole",            "repair_cost": 5500},
+    "alligator_crack":    {"base": 4.5, "label": "Alligator Crack",    "repair_cost": 16000},
+    "D20":                {"base": 4.5, "label": "Alligator Crack",    "repair_cost": 16000},
+    "transverse_crack":   {"base": 2.5, "label": "Transverse Crack",   "repair_cost": 900},
+    "D10":                {"base": 2.5, "label": "Transverse Crack",   "repair_cost": 900},
+    "longitudinal_crack": {"base": 1.5, "label": "Longitudinal Crack", "repair_cost": 500},
+    "D00":                {"base": 1.5, "label": "Longitudinal Crack", "repair_cost": 500},
 }
 
 SEVERITY_LEVELS = [
@@ -127,7 +127,7 @@ def calc_economic_impact(score):
     return round(score * 150 * 500 * 30)
 
 def calc_score(detections, img_w, img_h):
-    """Core scoring engine matching the documentation."""
+    """Proportional scoring engine — size-aware, realistic for Indian roads."""
     if not detections:
         return 0.0, []
 
@@ -136,33 +136,61 @@ def calc_score(detections, img_w, img_h):
 
     for det in detections:
         cls_name = det["class"].lower().replace(" ", "_")
-        cfg = DAMAGE_CONFIG.get(cls_name, {"base": 5, "label": cls_name, "repair_cost": 10000})
+        cfg = DAMAGE_CONFIG.get(cls_name, {"base": 3.0, "label": cls_name, "repair_cost": 2000})
         base = cfg["base"]
 
-        # Size ratio
+        # ── Size-based scoring (most important factor) ──
         bx1, by1, bx2, by2 = det["bbox"]
-        box_area = (bx2 - bx1) * (by2 - by1)
-        size_ratio = box_area / img_area if img_area > 0 else 0
-        if   size_ratio > 0.06: size_mult = 1.6
-        elif size_ratio > 0.02: size_mult = 1.3
-        else:                   size_mult = 1.0
+        box_area   = max(1, (bx2 - bx1) * (by2 - by1))
+        size_ratio = box_area / img_area if img_area > 0 else 0.01
 
-        # Confidence weight
+        # Size multiplier: linear scale
+        # <0.5% of frame  → ×0.5  (tiny crack, minor)
+        # 0.5–1% of frame → ×0.75
+        # 1–3% of frame   → ×1.0  (baseline)
+        # 3–6% of frame   → ×1.4
+        # 6–10% of frame  → ×1.7
+        # >10% of frame   → ×2.0  (huge damage)
+        if   size_ratio > 0.10: size_mult = 2.0
+        elif size_ratio > 0.06: size_mult = 1.7
+        elif size_ratio > 0.03: size_mult = 1.4
+        elif size_ratio > 0.01: size_mult = 1.0
+        elif size_ratio > 0.005: size_mult = 0.75
+        else:                   size_mult = 0.50  # tiny defect → low score
+
+        # ── Confidence weight ──
         conf = det.get("confidence", 0.8)
         if   conf >= 0.90: conf_w = 1.00
-        elif conf >= 0.70: conf_w = 0.85
-        elif conf >= 0.50: conf_w = 0.70
-        else:              conf_w = 0.55
+        elif conf >= 0.75: conf_w = 0.88
+        elif conf >= 0.55: conf_w = 0.72
+        elif conf >= 0.40: conf_w = 0.55
+        else:              conf_w = 0.40  # very uncertain detection
 
         single_score = min(10.0, base * size_mult * conf_w)
-        scored.append({**det, "single_score": round(single_score, 2),
-                       "label": cfg["label"], "repair_cost": cfg["repair_cost"]})
+        scored.append({**det, 
+                        "single_score": round(single_score, 2),
+                        "label":       cfg["label"], 
+                        "repair_cost": cfg["repair_cost"]})
 
-    n = len(scored)
-    avg = sum(d["single_score"] for d in scored) / n
-    count_penalty = 1 + min(0.4, (n - 1) * 0.10)
-    final = min(10.0, avg * count_penalty)
+    # ── Aggregate multiple detections ──
+    n   = len(scored)
+    max_score = max(d["single_score"] for d in scored)
+    avg_score = sum(d["single_score"] for d in scored) / n
+
+    if n == 1:
+        final = max_score
+    elif n <= 3:
+        # Few defects: 70% worst + 30% average
+        final = max_score * 0.70 + avg_score * 0.30
+        # Small bonus for multiple defects on same road
+        final = min(10.0, final * (1 + (n-1) * 0.08))
+    else:
+        # Many defects: already a bad road
+        final = max_score * 0.60 + avg_score * 0.40
+        final = min(10.0, final * (1 + min(0.3, (n-3) * 0.05)))
+
     return round(final, 2), scored
+
 
 def annotate_image(image_bytes, detections):
     """Draw bounding boxes on image, return annotated bytes."""
@@ -397,11 +425,148 @@ def send_whatsapp_alert(record):
         print(f"[WhatsApp] Failed: {e}")
 
 def get_city_health_score():
+    """
+    City health that doesn't crash from 1 bad inspection.
+    
+    Formula:
+    - Each road contributes a severity fraction (score/10)
+    - Penalty per road = (score/10) × road_weight
+    - road_weight decreases as more roads inspected (diminishing returns)
+    - Result: Adding more good roads improves score
+               1 emergency road can't drop city below ~75 unless multiple bad roads
+    """
     if not road_records_db:
         return 100
-    avg_severity = sum(r["score"] for r in road_records_db) / len(road_records_db)
-    rqi = 100 - (avg_severity * 10)
-    return round(max(0, min(100, rqi)), 1)
+    
+    # Group by road_name — take worst per road (avoid double-counting)
+    roads = {}
+    for r in road_records_db:
+        rn = r["road_name"]
+        if rn not in roads or r["score"] > roads[rn]["score"]:
+            roads[rn] = r
+    
+    road_list = list(roads.values())
+    n = len(road_list)
+    
+    if n == 0:
+        return 100
+    
+    # Max possible deduction = 70 points (city can't go below 30 from roads alone)
+    max_deduction = 70
+    
+    # Per-road weight: first road can deduct up to 15 pts, diminishes with more roads
+    # Formula: weight = max_deduction / (n + 5) — "+5" prevents single road from dominating
+    road_weight = max_deduction / (n + 5)
+    
+    total_deduction = 0
+    for r in road_list:
+        severity = r["score"] / 10.0  # 0.0 to 1.0
+        total_deduction += road_weight * severity
+    
+    health = max(30, min(100, 100 - total_deduction))
+    return round(health, 1)
+
+
+# ─── FIX 4: INDIAN REPAIR COST CALCULATOR ─────────────────────────
+# Based on: NRRDA 2024 Schedule of Rates, PWD India, CPWD DSR 2024
+# Materials: Bitumen VG-30 ₹55,000/MT, Aggregate ₹800/MT, 
+#            Labour ₹450/day, Machine hire ₹2,500/day
+
+# India Road Repair Cost Table (2024 rates, GST exclusive)
+INDIA_REPAIR_RATES = {
+    "pothole": {
+        # Categorized by bbox pixel area (heuristic for physical size)
+        "tiny":   {"max_px": 2000,  "cost": 1200,  "desc": "Cold mix patch (<0.1 sqm)"},
+        "small":  {"max_px": 6000,  "cost": 2800,  "desc": "Hot mix patch (0.1-0.5 sqm)"},
+        "medium": {"max_px": 15000, "cost": 6500,  "desc": "Full patch (0.5-1.5 sqm)"},
+        "large":  {"max_px": 30000, "cost": 18000, "desc": "Deep repair (1.5-3 sqm)"},
+        "huge":   {"max_px": 999999,"cost": 35000, "desc": "Full depth reclaim (>3 sqm)"},
+    },
+    "alligator_crack": {
+        "tiny":   {"max_px": 2000,  "cost": 3000,  "desc": "Crack seal spray"},
+        "small":  {"max_px": 6000,  "cost": 8000,  "desc": "Thin overlay (2 sqm)"},
+        "medium": {"max_px": 15000, "cost": 20000, "desc": "Mill & BC overlay (8 sqm)"},
+        "large":  {"max_px": 30000, "cost": 45000, "desc": "Full resurfacing (20 sqm)"},
+        "huge":   {"max_px": 999999,"cost": 85000, "desc": "Sub-base repair + overlay"},
+    },
+    "transverse_crack": {
+        "tiny":   {"max_px": 2000,  "cost": 300,  "desc": "Crack routing & sealant (1m)"},
+        "small":  {"max_px": 6000,  "cost": 650,  "desc": "Hot pour sealant (3m)"},
+        "medium": {"max_px": 15000, "cost": 1400, "desc": "Crack filling (8m)"},
+        "large":  {"max_px": 30000, "cost": 3000, "desc": "Patch + seal (15m)"},
+        "huge":   {"max_px": 999999,"cost": 6000, "desc": "Sectional repair"},
+    },
+    "longitudinal_crack": {
+        "tiny":   {"max_px": 2000,  "cost": 250,  "desc": "Sealant application (2m)"},
+        "small":  {"max_px": 6000,  "cost": 500,  "desc": "Routing & sealing (5m)"},
+        "medium": {"max_px": 15000, "cost": 1100, "desc": "Crack filling (12m)"},
+        "large":  {"max_px": 30000, "cost": 2500, "desc": "Overlay strip"},
+        "huge":   {"max_px": 999999,"cost": 5000, "desc": "Full lane reseal"},
+    },
+}
+
+def calc_indian_repair_cost(detections):
+    """
+    Calculate realistic Indian PWD repair cost for detected defects.
+    Returns total cost in INR.
+    """
+    if not detections:
+        return 0
+    
+    total = 0
+    for det in detections:
+        cls_name = det.get("class", "pothole").lower().replace(" ", "_")
+        rates = INDIA_REPAIR_RATES.get(cls_name, INDIA_REPAIR_RATES["pothole"])
+        
+        bbox = det.get("bbox", [0, 0, 50, 50])
+        px_area = max(1, (bbox[2]-bbox[0]) * (bbox[3]-bbox[1]))
+        
+        # Find the right size tier
+        cost = rates["huge"]["cost"]  # default
+        for tier in ["tiny", "small", "medium", "large", "huge"]:
+            if px_area <= rates[tier]["max_px"]:
+                cost = rates[tier]["cost"]
+                break
+        
+        total += cost
+    
+    # Add 5% GST + 3% contingency (standard India PWD contract)
+    total = round(total * 1.08)
+    return total
+
+
+# ─── FIX 5: UPDATE save_record to use Indian repair costs ──────────
+# In save_record(), replace:
+#   "economic_impact": calc_economic_impact(score),
+# With:
+#   "economic_impact": calc_indian_repair_cost(scored_dets),
+#   "repair_cost_breakdown": True,
+
+# Also update the demo data in api_add_demo():
+# Replace all "repair_cost" references to use calc_indian_repair_cost()
+
+# ─── FIX 6: ECONOMIC IMPACT — actual road damage cost (not formula) ──
+# Replace calc_economic_impact with this realistic version:
+
+
+def calc_economic_impact(score):
+    """
+    Economic impact = vehicle wear + time loss + accident risk
+    Based on: IRC (Indian Roads Congress) vehicle operating cost data
+    - Rs 15 per vehicle per pothole encounter (tire/suspension wear)
+    - Average 500 vehicles/day on urban road
+    - 30 days = 500 × 15 × 30 × severity_factor
+    """
+    if score <= 1:
+        return 0
+    severity_factor = (score / 10) ** 1.5  # non-linear: severe roads much worse
+    daily_vehicles  = 500
+    cost_per_vehicle_per_pothole = 15  # INR
+    days = 30
+    impact = round(daily_vehicles * cost_per_vehicle_per_pothole * days * severity_factor)
+    return max(0, impact)
+
+
 
 def get_stats():
     total   = len(road_records_db)

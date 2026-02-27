@@ -5,758 +5,990 @@
 {% block head %}
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.heat/0.2.0/leaflet-heat.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@600;700&family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet"/>
+
 <style>
-/* ── Layout ─────────────────────────────────────────── */
-.map-page { display:flex; gap:0; height:calc(100vh - 120px); border-radius:16px; overflow:hidden; box-shadow:0 8px 40px rgba(0,0,0,.18); }
+/* ══ DESIGN SYSTEM ════════════════════════════ */
+:root {
+  --bg:        #07080d;
+  --panel:     #0d0f1a;
+  --panel2:    #13162b;
+  --border:    rgba(255,255,255,.08);
+  --accent:    #4f9cff;
+  --accent2:   #ff5b7f;
+  --text:      #e8eaf6;
+  --muted:     rgba(255,255,255,.35);
+  --font:      'Nunito', sans-serif;
+  --font-head: 'Rajdhani', sans-serif;
+  --c-emergency: #ff2d4a;
+  --c-critical:  #ff6b35;
+  --c-severe:    #ffb800;
+  --c-moderate:  #4ecb71;
+  --c-good:      #3dd6f5;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
 
-/* ── Left Panel ─────────────────────────────────────── */
-.map-panel {
-  width:320px; min-width:320px; background:#fff;
-  display:flex; flex-direction:column; border-right:1px solid #e8e8e8;
-  transition: width .3s;
+/* ══ CRITICAL FIX: MAP LAYOUT ═════════════════
+   The map-shell must fill whatever space is left
+   AFTER the navbar. We use a data attribute on
+   body to detect the navbar height dynamically.
+   Fallback = 60px (works for most base.html).
+══════════════════════════════════════════════ */
+.map-full-wrapper {
+  /* Stretch to fill page content area exactly */
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  z-index: 10;
+  pointer-events: none; /* Let base clicks through */
 }
-.map-panel.collapsed { width:0; min-width:0; overflow:hidden; }
 
-.panel-header {
-  background:linear-gradient(135deg,#1a1a2e,#0f3460);
-  padding:16px 18px; color:#fff; flex-shrink:0;
+/* The actual shell sits inside and auto-calculates its top */
+.map-shell {
+  position: absolute;
+  /* We'll set top via JS after measuring navbar */
+  left: 0; right: 0; bottom: 0;
+  top: 60px; /* safe default, overridden by JS */
+  display: flex;
+  background: var(--bg);
+  pointer-events: all;
 }
-.panel-header h6 { margin:0; font-weight:800; font-size:.95rem; letter-spacing:.3px; }
-.panel-header small { color:rgba(255,255,255,.45); font-size:.72rem; }
 
-/* City Score Bar */
-.city-score-bar {
-  padding:14px 16px; background:#f8f9fa; border-bottom:1px solid #eee; flex-shrink:0;
+/* ══ SIDEBAR ══════════════════════════════════ */
+.sidebar {
+  width: 290px;
+  min-width: 290px;
+  background: var(--panel);
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border);
+  transition: width .35s cubic-bezier(.4,0,.2,1), min-width .35s;
+  overflow: hidden;
+  position: relative;
+  z-index: 500;
+  flex-shrink: 0;
 }
-.score-ring-wrap { display:flex; align-items:center; gap:14px; }
-.score-ring { width:56px; height:56px; flex-shrink:0; }
-.score-ring circle { fill:none; stroke-width:6; }
-.score-ring .track { stroke:#e0e0e0; }
-.score-ring .fill  { stroke-linecap:round; transform:rotate(-90deg); transform-origin:50% 50%; transition:stroke-dashoffset .8s; }
-.score-ring .num   { font-size:13px; font-weight:900; dominant-baseline:middle; text-anchor:middle; }
-.score-stats { display:grid; grid-template-columns:1fr 1fr; gap:6px; flex:1; }
-.ss-box { background:#fff; border-radius:8px; padding:6px 10px; border:1px solid #eee; text-align:center; }
-.ss-box .sv { font-size:1.1rem; font-weight:800; color:#1a1a2e; }
-.ss-box .sl { font-size:.65rem; color:#aaa; }
+.sidebar.collapsed { width: 0; min-width: 0; }
 
-/* Filters */
-.filter-section { padding:10px 14px; border-bottom:1px solid #eee; flex-shrink:0; }
-.filter-section label { font-size:.68rem; font-weight:700; color:#aaa; text-transform:uppercase; margin-bottom:6px; display:block; }
-.filter-chips { display:flex; flex-wrap:wrap; gap:4px; margin-bottom:8px; }
-.fchip {
-  font-size:.68rem; padding:3px 10px; border-radius:20px; border:none;
-  cursor:pointer; font-weight:700; transition:.15s; opacity:.65;
+.sb-head {
+  padding: 14px 16px 12px;
+  background: linear-gradient(135deg,#0f1224,#1a1f3e);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
 }
-.fchip.active { opacity:1; transform:scale(1.05); box-shadow:0 2px 8px rgba(0,0,0,.2); }
-.search-box { position:relative; }
-.search-box input {
-  width:100%; border:1px solid #e0e0e0; border-radius:8px;
-  padding:7px 30px 7px 10px; font-size:.8rem; outline:none;
-  transition:border-color .2s;
+.sb-head h5 { font-family:var(--font-head); font-size:1.05rem; color:#fff; margin-bottom:2px; letter-spacing:.5px; }
+.sb-head small { color:var(--muted); font-size:.68rem; }
+
+/* City Health Ring */
+.health-ring-wrap {
+  padding: 12px 14px;
+  background: var(--panel2);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
 }
-.search-box input:focus { border-color:#0f3460; }
-.search-box i { position:absolute; right:10px; top:50%; transform:translateY(-50%); color:#aaa; font-size:.75rem; }
+.health-ring { width: 64px; height: 64px; flex-shrink:0; }
+.health-ring circle { fill:none; stroke-width:7; }
+.health-ring .track { stroke:rgba(255,255,255,.08); }
+.health-ring .fill  { stroke-linecap:round; transform-origin:50% 50%; transform:rotate(-90deg); transition:stroke-dashoffset 1s ease; }
+.health-ring .num   { font-family:var(--font-head); font-size:15px; font-weight:700; fill:#fff; dominant-baseline:middle; text-anchor:middle; }
+.health-ring .lbl   { font-size:6.5px; fill:var(--muted); dominant-baseline:middle; text-anchor:middle; }
+
+.kpi-grid { display:grid; grid-template-columns:1fr 1fr; gap:5px; flex:1; }
+.kpi { background:rgba(255,255,255,.05); border:1px solid var(--border); border-radius:7px; padding:6px 8px; text-align:center; }
+.kpi .kv { font-family:var(--font-head); font-size:1.1rem; font-weight:700; }
+.kpi .kl { font-size:.6rem; color:var(--muted); margin-top:1px; }
+
+/* Filter Bar */
+.filter-bar { padding:9px 12px; border-bottom:1px solid var(--border); flex-shrink:0; }
+.filter-bar label { font-size:.6rem; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.8px; margin-bottom:6px; display:block; }
+.chips { display:flex; flex-wrap:wrap; gap:3px; margin-bottom:7px; }
+.chip { font-size:.65rem; font-weight:800; padding:3px 9px; border-radius:20px; border:none; cursor:pointer; transition:all .2s; opacity:.5; }
+.chip.on { opacity:1; box-shadow:0 0 8px var(--chip-color,#fff4); transform:scale(1.06); }
+.search-wrap { position:relative; }
+.search-wrap input { width:100%; background:rgba(255,255,255,.06); border:1px solid var(--border); border-radius:8px; padding:7px 28px 7px 11px; font-size:.76rem; color:var(--text); font-family:var(--font); outline:none; transition:border-color .2s; }
+.search-wrap input::placeholder { color:var(--muted); }
+.search-wrap input:focus { border-color:var(--accent); }
+.search-wrap i { position:absolute; right:9px; top:50%; transform:translateY(-50%); color:var(--muted); font-size:.72rem; }
 
 /* Road List */
-.road-list-wrap { flex:1; overflow-y:auto; }
-.road-item {
-  padding:11px 14px; border-bottom:1px solid #f5f5f5;
-  cursor:pointer; transition:.15s; display:flex; align-items:center; gap:10px;
-}
-.road-item:hover { background:#f8f9fa; transform:translateX(3px); }
-.road-item.active-item { background:#f0f4ff; border-left:3px solid #0f3460; }
-.ri-score {
-  width:40px; height:40px; border-radius:10px; display:flex; align-items:center;
-  justify-content:center; font-weight:900; font-size:.9rem; color:#fff; flex-shrink:0;
-}
-.ri-info { flex:1; min-width:0; }
-.ri-name { font-weight:700; font-size:.83rem; color:#1a1a2e; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.ri-meta { font-size:.7rem; color:#aaa; margin-top:2px; }
-.ri-eco  { font-size:.68rem; color:#e94560; font-weight:700; }
-.ri-badge { font-size:.6rem; padding:2px 7px; border-radius:10px; color:#fff; font-weight:700; white-space:nowrap; }
+.road-list { flex:1; overflow-y:auto; }
+.road-list::-webkit-scrollbar { width:3px; }
+.road-list::-webkit-scrollbar-thumb { background:rgba(255,255,255,.12); border-radius:2px; }
+.road-item { display:flex; align-items:center; gap:9px; padding:9px 12px; border-bottom:1px solid rgba(255,255,255,.04); cursor:pointer; transition:all .15s; }
+.road-item:hover { background:rgba(255,255,255,.05); padding-left:16px; }
+.road-item.sel { background:rgba(79,156,255,.1); border-left:2px solid var(--accent); }
+.ri-score { width:36px; height:36px; border-radius:9px; display:flex; align-items:center; justify-content:center; font-family:var(--font-head); font-weight:700; font-size:.95rem; color:#fff; flex-shrink:0; }
+.ri-body { flex:1; min-width:0; }
+.ri-name { font-weight:700; font-size:.78rem; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.ri-sub  { font-size:.65rem; color:var(--muted); margin-top:2px; }
+.ri-eco  { font-size:.65rem; color:var(--accent2); font-weight:700; }
+.ri-badge { font-size:.58rem; padding:2px 7px; border-radius:20px; font-weight:800; white-space:nowrap; flex-shrink:0; }
 
-/* ── Map Wrap ─────────────────────────────────────── */
-.map-wrap { flex:1; position:relative; }
+/* Sidebar tab */
+.sb-toggle { position:absolute; top:50%; right:-20px; transform:translateY(-50%); background:var(--panel); border:1px solid var(--border); border-left:none; width:20px; height:44px; border-radius:0 8px 8px 0; cursor:pointer; display:flex; align-items:center; justify-content:center; color:var(--muted); font-size:.6rem; z-index:600; transition:background .2s; }
+.sb-toggle:hover { background:var(--panel2); color:#fff; }
+
+/* ══ MAP AREA ════════════════════════════════ */
+.map-area { flex:1; position:relative; overflow:hidden; }
 #map { width:100%; height:100%; }
 
-/* ── Floating Controls ───────────────────────────── */
-.map-fab-group {
-  position:absolute; top:14px; right:14px; z-index:1000;
-  display:flex; flex-direction:column; gap:6px;
-}
-.map-fab {
-  background:#fff; border:none; width:38px; height:38px; border-radius:10px;
-  display:flex; align-items:center; justify-content:center;
-  box-shadow:0 2px 10px rgba(0,0,0,.2); cursor:pointer; font-size:.9rem;
-  transition:.2s; color:#1a1a2e;
-}
-.map-fab:hover { background:#1a1a2e; color:#fff; transform:scale(1.08); }
-.map-fab.active { background:#e94560; color:#fff; }
-.map-fab-label { position:absolute; right:48px; top:50%; transform:translateY(-50%); background:#1a1a2e; color:#fff; padding:3px 10px; border-radius:6px; font-size:.7rem; white-space:nowrap; pointer-events:none; opacity:0; transition:.2s; }
-.map-fab:hover .map-fab-label { opacity:1; }
+/* ══ VIEW BAR ════════════════════════════════ */
+.view-bar { position:absolute; top:12px; left:12px; z-index:1000; background:rgba(13,15,26,.92); border:1px solid var(--border); border-radius:11px; overflow:hidden; display:flex; backdrop-filter:blur(12px); box-shadow:0 4px 20px rgba(0,0,0,.4); }
+.vb-btn { border:none; padding:8px 13px; font-size:.72rem; font-weight:800; font-family:var(--font); cursor:pointer; background:transparent; color:var(--muted); transition:all .2s; letter-spacing:.3px; white-space:nowrap; }
+.vb-btn:hover { color:#fff; background:rgba(255,255,255,.06); }
+.vb-btn.on { background:var(--accent); color:#fff; }
 
-/* View toggle bar */
-.view-toggle {
-  position:absolute; top:14px; left:14px; z-index:1000;
-  background:#fff; border-radius:10px; overflow:hidden;
-  box-shadow:0 2px 10px rgba(0,0,0,.15); display:flex;
-}
-.vt-btn {
-  border:none; padding:8px 14px; font-size:.75rem; font-weight:700;
-  cursor:pointer; background:transparent; color:#888; transition:.2s;
-}
-.vt-btn.active { background:#1a1a2e; color:#fff; }
+/* ══ FABs ════════════════════════════════════ */
+.fabs { position:absolute; top:12px; right:12px; z-index:1000; display:flex; flex-direction:column; gap:6px; }
+.fab { width:38px; height:38px; background:rgba(13,15,26,.92); border:1px solid var(--border); border-radius:10px; cursor:pointer; display:flex; align-items:center; justify-content:center; color:var(--muted); font-size:.85rem; backdrop-filter:blur(12px); box-shadow:0 4px 12px rgba(0,0,0,.3); transition:all .2s; }
+.fab:hover { background:var(--accent); color:#fff; transform:scale(1.08); border-color:var(--accent); }
+.fab.on { background:var(--accent2); color:#fff; border-color:var(--accent2); }
 
-/* Live indicator */
-.live-pill {
-  position:absolute; bottom:14px; left:14px; z-index:1000;
-  background:rgba(13,13,26,.85); color:#fff; padding:6px 14px;
-  border-radius:20px; font-size:.72rem; backdrop-filter:blur(8px);
-  display:flex; align-items:center; gap:6px;
-}
-.live-dot { width:7px; height:7px; border-radius:50%; background:#28a745; animation:pulse-anim 1.5s infinite; }
+/* ══ STATUS BAR ══════════════════════════════ */
+.status-bar { position:absolute; bottom:12px; left:12px; right:12px; z-index:1000; display:flex; justify-content:space-between; align-items:flex-end; pointer-events:none; }
+.live-pill { background:rgba(13,15,26,.9); border:1px solid var(--border); backdrop-filter:blur(12px); padding:6px 13px; border-radius:20px; font-size:.7rem; display:flex; align-items:center; gap:6px; color:var(--text); pointer-events:auto; }
+.live-dot { width:6px; height:6px; border-radius:50%; background:#4ecb71; animation:pulse-dot 1.8s infinite; }
+@keyframes pulse-dot { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(1.4)} }
+.kpi-pills { display:flex; gap:7px; pointer-events:auto; }
+.kpi-pill { background:rgba(13,15,26,.9); border:1px solid var(--border); backdrop-filter:blur(12px); padding:6px 13px; border-radius:20px; font-size:.7rem; text-align:center; min-width:65px; }
+.kpi-pill .kv { font-family:var(--font-head); font-size:.9rem; font-weight:700; }
+.kpi-pill .kl { color:var(--muted); font-size:.58rem; }
 
-/* Stats strip at bottom */
-.stats-strip {
-  position:absolute; bottom:14px; right:14px; z-index:1000;
-  display:flex; gap:8px;
-}
-.stat-pill {
-  background:rgba(13,13,26,.85); color:#fff; padding:6px 12px;
-  border-radius:20px; font-size:.72rem; backdrop-filter:blur(8px);
-  text-align:center;
-}
-.stat-pill .sp-val { font-weight:800; font-size:.9rem; }
-.stat-pill .sp-lbl { color:rgba(255,255,255,.5); font-size:.62rem; }
+/* ══ LEGEND ══════════════════════════════════ */
+.legend-box { position:absolute; bottom:58px; right:12px; z-index:1000; background:rgba(13,15,26,.94); border:1px solid var(--border); border-radius:13px; padding:13px 15px; backdrop-filter:blur(12px); display:none; min-width:175px; box-shadow:0 8px 28px rgba(0,0,0,.5); }
+.legend-box.show { display:block; }
+.legend-box h6 { font-family:var(--font-head); font-size:.83rem; color:#fff; margin-bottom:9px; letter-spacing:.5px; }
+.legend-row { display:flex; align-items:center; gap:8px; margin:5px 0; font-size:.71rem; color:var(--text); }
+.l-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+.legend-hr { border:none; border-top:1px solid var(--border); margin:9px 0 7px; }
+.legend-note { font-size:.62rem; color:var(--muted); line-height:1.5; }
 
-/* ── Panel Toggle ─────────────────────────────────── */
-.panel-toggle {
-  position:absolute; top:50%; left:320px; transform:translateY(-50%);
-  z-index:1001; background:#fff; border:none; width:20px; height:50px;
-  border-radius:0 8px 8px 0; cursor:pointer; box-shadow:2px 0 8px rgba(0,0,0,.1);
-  color:#888; font-size:.7rem; transition:.3s; display:flex; align-items:center; justify-content:center;
-}
-.panel-toggle.collapsed { left:0; }
+/* ══ ROUTE BAR ═══════════════════════════════ */
+.route-bar { position:absolute; bottom:58px; left:50%; transform:translateX(-50%); z-index:1000; background:rgba(13,15,26,.94); border:1px solid var(--border); backdrop-filter:blur(12px); border-radius:28px; padding:9px 18px; display:none; align-items:center; gap:11px; font-size:.76rem; }
+.route-bar.show { display:flex; }
+.rp-btn { width:30px; height:30px; background:rgba(255,255,255,.08); border:1px solid var(--border); border-radius:50%; color:var(--text); cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:.82rem; transition:all .2s; }
+.rp-btn:hover { background:var(--accent); color:#fff; border-color:var(--accent); }
 
-/* ── Popup ───────────────────────────────────────── */
-.rs-popup { min-width:240px; max-width:300px; font-family:'Segoe UI',sans-serif; }
-.rs-popup .pop-header { background:linear-gradient(135deg,#1a1a2e,#0f3460); color:#fff; padding:12px 14px; margin:-14px -20px 12px; border-radius:6px 6px 0 0; }
-.rs-popup .pop-road { font-weight:800; font-size:.95rem; margin-bottom:3px; }
-.rs-popup .pop-score { display:inline-block; padding:2px 10px; border-radius:20px; font-size:.75rem; font-weight:700; }
-.rs-popup .pop-row { display:flex; justify-content:space-between; padding:5px 0; border-bottom:1px solid #f0f0f0; font-size:.78rem; }
-.rs-popup .pop-row:last-of-type { border:none; }
-.rs-popup .pop-key { color:#888; }
-.rs-popup .pop-val { font-weight:700; color:#1a1a2e; text-align:right; max-width:60%; }
-.rs-popup .pop-img { width:100%; border-radius:6px; margin:10px 0 6px; display:block; }
-.rs-popup .pop-types { margin:8px 0; }
-.rs-popup .pop-type-chip { display:inline-block; padding:2px 8px; border-radius:12px; font-size:.68rem; font-weight:700; color:#fff; margin:2px; }
-.rs-popup .pop-actions { display:flex; gap:6px; margin-top:10px; }
-.rs-popup .pop-btn { flex:1; text-align:center; padding:6px; border-radius:6px; text-decoration:none; font-size:.72rem; font-weight:700; cursor:pointer; border:none; }
+/* ══ POPUP ═══════════════════════════════════ */
+.rs-popup { min-width:250px; max-width:310px; font-family:var(--font); }
+.pop-head { margin:-12px -16px 11px; padding:13px 15px; background:linear-gradient(135deg,#0f1224,#1a1f3e); border-radius:10px 10px 0 0; }
+.pop-road { font-family:var(--font-head); font-size:.97rem; color:#fff; margin-bottom:5px; }
+.pop-badge { display:inline-flex; align-items:center; gap:5px; padding:3px 10px; border-radius:20px; font-size:.7rem; font-weight:800; }
+.pop-bar { margin:7px 0; height:4px; background:rgba(255,255,255,.1); border-radius:2px; overflow:hidden; }
+.pop-bar-fill { height:100%; border-radius:2px; transition:width .8s; }
+.pop-rows { margin-bottom:9px; }
+.pop-row { display:flex; justify-content:space-between; align-items:center; padding:4px 0; border-bottom:1px solid rgba(255,255,255,.05); font-size:.73rem; }
+.pop-row:last-child { border:none; }
+.pk { color:#999; }
+.pv { font-weight:700; color:#fff; text-align:right; max-width:60%; font-size:.71rem; }
 
-/* ── Route Playback ──────────────────────────────── */
-.route-panel {
-  position:absolute; bottom:60px; left:50%; transform:translateX(-50%);
-  z-index:1000; background:rgba(13,13,26,.92); color:#fff;
-  padding:10px 20px; border-radius:30px; backdrop-filter:blur(10px);
-  display:none; align-items:center; gap:12px; font-size:.8rem;
-  box-shadow:0 4px 20px rgba(0,0,0,.3);
-}
-.route-panel.show { display:flex; }
-.rp-btn { background:rgba(255,255,255,.12); border:none; color:#fff; width:30px; height:30px; border-radius:50%; cursor:pointer; font-size:.9rem; transition:.2s; }
-.rp-btn:hover { background:rgba(255,255,255,.25); }
+/* COST BREAKDOWN BOX */
+.cost-box { background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08); border-radius:8px; padding:9px 11px; margin:8px 0; }
+.cost-box-title { font-size:.68rem; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; margin-bottom:7px; }
+.cost-line { display:flex; justify-content:space-between; font-size:.7rem; padding:2px 0; }
+.cost-line .cl { color:#aaa; }
+.cost-line .cv { font-weight:700; color:#fff; }
+.cost-total { display:flex; justify-content:space-between; padding-top:6px; margin-top:5px; border-top:1px solid rgba(255,255,255,.1); font-size:.78rem; font-weight:800; }
+.cost-total .ct-l { color:var(--text); }
+.cost-total .ct-v { color:var(--accent2); }
 
-/* ── Legend ──────────────────────────────────────── */
-.map-legend {
-  position:absolute; bottom:60px; right:14px; z-index:1000;
-  background:rgba(13,13,26,.88); color:#fff; padding:12px 16px;
-  border-radius:12px; backdrop-filter:blur(8px); font-size:.72rem;
-  display:none;
-}
-.map-legend.show { display:block; }
-.legend-row { display:flex; align-items:center; gap:8px; margin:5px 0; }
-.legend-dot { width:12px; height:12px; border-radius:50%; }
+.pop-types { display:flex; flex-wrap:wrap; gap:3px; margin:7px 0; }
+.pop-type { padding:2px 8px; border-radius:11px; font-size:.64rem; font-weight:800; color:#fff; }
+.pop-img { width:100%; border-radius:7px; margin:7px 0 3px; display:block; border:1px solid rgba(255,255,255,.1); }
+.pop-actions { display:flex; gap:5px; margin-top:9px; }
+.pop-btn { flex:1; padding:7px 3px; border-radius:7px; border:none; font-size:.68rem; font-weight:800; cursor:pointer; text-align:center; text-decoration:none; display:flex; align-items:center; justify-content:center; gap:3px; font-family:var(--font); transition:opacity .15s; }
+.pop-btn:hover { opacity:.82; }
 
-/* Scrollbar */
-.road-list-wrap::-webkit-scrollbar { width:4px; }
-.road-list-wrap::-webkit-scrollbar-track { background:#f0f0f0; }
-.road-list-wrap::-webkit-scrollbar-thumb { background:#ccc; border-radius:2px; }
+/* Leaflet dark popup */
+.leaflet-popup-content-wrapper, .leaflet-popup-tip { background:#13162b !important; color:var(--text) !important; box-shadow:0 10px 40px rgba(0,0,0,.6) !important; border-radius:12px !important; }
+.leaflet-popup-content-wrapper { border:1px solid rgba(255,255,255,.1) !important; }
+.leaflet-popup-close-button { color:rgba(255,255,255,.4) !important; top:8px !important; right:10px !important; font-size:16px !important; }
+.leaflet-popup-close-button:hover { color:#fff !important; }
+.leaflet-control-attribution { background:rgba(0,0,0,.5) !important; color:rgba(255,255,255,.4) !important; font-size:9px !important; }
+
+/* Empty state */
+.empty-state { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:36px 18px; color:var(--muted); text-align:center; }
+.empty-state i { font-size:2.2rem; margin-bottom:12px; opacity:.25; }
+.empty-state p { font-size:.78rem; line-height:1.6; }
+
+/* Pulse */
+@keyframes pulse-ring { 0%{transform:scale(1);opacity:.6} 70%{transform:scale(2.3);opacity:0} 100%{transform:scale(2.3);opacity:0} }
 </style>
 {% endblock %}
 
 {% block content %}
-<div style="position:relative;margin:-28px;height:calc(100vh - 58px);">
+<!-- 
+  FIX: We wrap everything in a positioned container.
+  JS will measure the navbar and set the correct top offset.
+-->
+<div id="map-shell" class="map-shell">
 
-<!-- Panel Toggle -->
-<button class="panel-toggle" id="panel-toggle" onclick="togglePanel()" title="Toggle sidebar">
-  <i class="fas fa-chevron-left" id="panel-toggle-icon"></i>
-</button>
-
-<div class="map-page" id="map-page">
-
-  <!-- ── Left Panel ──────────────────────────── -->
-  <div class="map-panel" id="map-panel">
-    <div class="panel-header">
-      <h6><i class="fas fa-map me-2"></i>City Intelligence Map</h6>
-      <small id="last-update-text">Updating every 15 seconds</small>
+  <!-- ── SIDEBAR ──────────────────────────── -->
+  <div class="sidebar" id="sidebar">
+    <div class="sb-head">
+      <h5><i class="fas fa-map-marked-alt" style="color:var(--accent);margin-right:7px"></i>City Intelligence</h5>
+      <small id="last-update">Connecting…</small>
     </div>
 
-    <!-- City Health Score -->
-    <div class="city-score-bar">
-      <div class="score-ring-wrap">
-        <svg class="score-ring" viewBox="0 0 56 56">
-          <circle class="track" cx="28" cy="28" r="22"/>
-          <circle class="fill" id="score-ring-fill" cx="28" cy="28" r="22"
-            stroke="#28a745" stroke-dasharray="138.2" stroke-dashoffset="138.2"/>
-          <text class="num" id="score-ring-num" x="28" y="29" fill="#1a1a2e">—</text>
-        </svg>
-        <div class="score-stats">
-          <div class="ss-box"><div class="sv" id="ss-total">0</div><div class="sl">Roads</div></div>
-          <div class="ss-box"><div class="sv" id="ss-crit" style="color:#dc3545">0</div><div class="sl">Critical</div></div>
-          <div class="ss-box"><div class="sv" id="ss-emerg" style="color:#7b0000">0</div><div class="sl">Emergency</div></div>
-          <div class="ss-box"><div class="sv" id="ss-eco" style="color:#e94560">—</div><div class="sl">Eco Risk</div></div>
-        </div>
+    <div class="health-ring-wrap">
+      <svg class="health-ring" viewBox="0 0 64 64">
+        <circle class="track" cx="32" cy="32" r="25"/>
+        <circle class="fill" id="ring-fill" cx="32" cy="32" r="25"
+          stroke="#4f9cff" stroke-dasharray="157.1" stroke-dashoffset="157.1"/>
+        <text class="num" id="ring-num" x="32" y="30">—</text>
+        <text class="lbl" x="32" y="42">SCORE</text>
+      </svg>
+      <div class="kpi-grid">
+        <div class="kpi"><div class="kv" id="kpi-total">0</div><div class="kl">Roads</div></div>
+        <div class="kpi"><div class="kv" id="kpi-crit" style="color:var(--c-critical)">0</div><div class="kl">Critical+</div></div>
+        <div class="kpi"><div class="kv" id="kpi-emerg" style="color:var(--c-emergency)">0</div><div class="kl">Emergency</div></div>
+        <div class="kpi"><div class="kv" id="kpi-eco" style="color:var(--accent2)">—</div><div class="kl">Budget</div></div>
       </div>
     </div>
 
-    <!-- Filters -->
-    <div class="filter-section">
+    <div class="filter-bar">
       <label>Filter by severity</label>
-      <div class="filter-chips">
-        <button class="fchip active" data-level="" style="background:#1a1a2e;color:#fff" onclick="setFilter(this,'')">All</button>
-        <button class="fchip" data-level="Emergency" style="background:#7b0000;color:#fff" onclick="setFilter(this,'Emergency')">Emergency</button>
-        <button class="fchip" data-level="Critical"  style="background:#dc3545;color:#fff" onclick="setFilter(this,'Critical')">Critical</button>
-        <button class="fchip" data-level="Severe"    style="background:#fd7e14;color:#fff" onclick="setFilter(this,'Severe')">Severe</button>
-        <button class="fchip" data-level="Moderate"  style="background:#ffc107;color:#333" onclick="setFilter(this,'Moderate')">Moderate</button>
-        <button class="fchip" data-level="Good"      style="background:#28a745;color:#fff" onclick="setFilter(this,'Good')">Good</button>
+      <div class="chips">
+        <button class="chip on" style="background:var(--accent);color:#fff;--chip-color:var(--accent)" onclick="setFilter(this,'')">All</button>
+        <button class="chip" style="background:var(--c-emergency);color:#fff;--chip-color:var(--c-emergency)" onclick="setFilter(this,'Emergency')">Emergency</button>
+        <button class="chip" style="background:var(--c-critical);color:#fff;--chip-color:var(--c-critical)" onclick="setFilter(this,'Critical')">Critical</button>
+        <button class="chip" style="background:var(--c-severe);color:#000;--chip-color:var(--c-severe)" onclick="setFilter(this,'Severe')">Severe</button>
+        <button class="chip" style="background:var(--c-moderate);color:#000;--chip-color:var(--c-moderate)" onclick="setFilter(this,'Moderate')">Moderate</button>
+        <button class="chip" style="background:var(--c-good);color:#000;--chip-color:var(--c-good)" onclick="setFilter(this,'Good')">Good</button>
       </div>
-      <div class="search-box">
-        <input type="text" id="road-search" placeholder="Search road name…" oninput="renderSidebar()"/>
+      <div class="search-wrap">
+        <input type="text" id="search" placeholder="Search road name…" oninput="refreshAll()"/>
         <i class="fas fa-search"></i>
       </div>
     </div>
 
-    <!-- Road List -->
-    <div class="road-list-wrap" id="road-list"></div>
+    <div class="road-list" id="road-list">
+      <div class="empty-state">
+        <i class="fas fa-satellite-dish"></i>
+        <p>Loading road data…<br><span style="opacity:.45;font-size:.68rem">Auto-refreshes every 15s</span></p>
+      </div>
+    </div>
+
+    <button class="sb-toggle" onclick="toggleSidebar()">
+      <i id="sb-icon" class="fas fa-chevron-left"></i>
+    </button>
   </div>
 
-  <!-- ── Map ────────────────────────────────────── -->
-  <div class="map-wrap">
+  <!-- ── MAP ──────────────────────────────── -->
+  <div class="map-area">
     <div id="map"></div>
 
-    <!-- View Toggle -->
-    <div class="view-toggle">
-      <button class="vt-btn active" id="vt-markers" onclick="switchView('markers')"><i class="fas fa-map-marker-alt me-1"></i>Markers</button>
-      <button class="vt-btn" id="vt-cluster" onclick="switchView('cluster')"><i class="fas fa-circle-nodes me-1"></i>Cluster</button>
-      <button class="vt-btn" id="vt-heat" onclick="switchView('heat')"><i class="fas fa-fire me-1"></i>Heat</button>
-      <button class="vt-btn" id="vt-route" onclick="switchView('route')"><i class="fas fa-route me-1"></i>Route</button>
+    <div class="view-bar">
+      <button class="vb-btn on" id="vb-markers" onclick="switchView('markers')"><i class="fas fa-map-marker-alt"></i> Pins</button>
+      <button class="vb-btn" id="vb-labels"   onclick="switchView('labels')"><i class="fas fa-tag"></i> Labels</button>
+      <button class="vb-btn" id="vb-heat"     onclick="switchView('heat')"><i class="fas fa-fire"></i> Heat</button>
+      <button class="vb-btn" id="vb-route"    onclick="switchView('route')"><i class="fas fa-route"></i> Route</button>
     </div>
 
-    <!-- FAB controls -->
-    <div class="map-fab-group">
-      <div style="position:relative">
-        <button class="map-fab" onclick="locateMe()" title="My Location"><i class="fas fa-location-crosshairs"></i></button>
-      </div>
-      <div style="position:relative">
-        <button class="map-fab" onclick="fitAllMarkers()" title="Fit all markers"><i class="fas fa-compress-arrows-alt"></i></button>
-      </div>
-      <div style="position:relative">
-        <button class="map-fab" id="fab-legend" onclick="toggleLegend()" title="Legend"><i class="fas fa-circle-info"></i></button>
-      </div>
-      <div style="position:relative">
-        <button class="map-fab" onclick="exportMapPNG()" title="Screenshot map"><i class="fas fa-camera"></i></button>
-      </div>
-      <div style="position:relative">
-        <button class="map-fab" onclick="cycleBasemap()" title="Change map style" id="fab-basemap"><i class="fas fa-layer-group"></i></button>
-      </div>
+    <div class="fabs">
+      <button class="fab" onclick="locateMe()" title="My Location"><i class="fas fa-location-crosshairs"></i></button>
+      <button class="fab" onclick="fitAll()" title="Fit all markers"><i class="fas fa-compress-arrows-alt"></i></button>
+      <button class="fab" id="fab-legend" onclick="toggleLegend()" title="Legend"><i class="fas fa-info-circle"></i></button>
+      <button class="fab" id="fab-map" onclick="cycleMap()" title="Change basemap"><i class="fas fa-layer-group"></i></button>
     </div>
 
-    <!-- Live pill -->
-    <div class="live-pill">
-      <span class="live-dot"></span>
-      <span id="live-text">Live · <span id="map-count">0</span> roads</span>
-    </div>
-
-    <!-- Stats strip -->
-    <div class="stats-strip">
-      <div class="stat-pill">
-        <div class="sp-val" id="strip-health">—</div>
-        <div class="sp-lbl">City Score</div>
+    <div class="status-bar">
+      <div class="live-pill">
+        <span class="live-dot"></span>
+        <span>Live · <strong id="map-count">0</strong> roads</span>
       </div>
-      <div class="stat-pill">
-        <div class="sp-val" id="strip-eco">—</div>
-        <div class="sp-lbl">30d Risk</div>
+      <div class="kpi-pills">
+        <div class="kpi-pill"><div class="kv" id="strip-health">—</div><div class="kl">City Score</div></div>
+        <div class="kpi-pill"><div class="kv" id="strip-budget">—</div><div class="kl">Repair Budget</div></div>
       </div>
     </div>
 
-    <!-- Route Playback Controls -->
-    <div class="route-panel" id="route-panel">
-      <button class="rp-btn" onclick="playbackPrev()"><i class="fas fa-step-backward"></i></button>
-      <button class="rp-btn" id="rp-play" onclick="togglePlayback()"><i class="fas fa-play"></i></button>
-      <button class="rp-btn" onclick="playbackNext()"><i class="fas fa-step-forward"></i></button>
-      <span id="rp-label" style="min-width:140px;text-align:center">Select a road</span>
-      <button class="rp-btn" onclick="stopRoute()" style="margin-left:4px"><i class="fas fa-times"></i></button>
+    <div class="route-bar" id="route-bar">
+      <button class="rp-btn" onclick="rpPrev()"><i class="fas fa-step-backward"></i></button>
+      <button class="rp-btn" id="rp-play" onclick="rpToggle()"><i class="fas fa-play"></i></button>
+      <button class="rp-btn" onclick="rpNext()"><i class="fas fa-step-forward"></i></button>
+      <span id="rp-label" style="min-width:155px;text-align:center;color:var(--text)">Select a road</span>
+      <button class="rp-btn" onclick="rpStop()" style="color:var(--accent2)"><i class="fas fa-times"></i></button>
     </div>
 
-    <!-- Legend -->
-    <div class="map-legend" id="map-legend">
-      <div style="font-weight:700;margin-bottom:8px;font-size:.75rem">Severity Legend</div>
-      <div class="legend-row"><span class="legend-dot" style="background:#7b0000"></span>Emergency (8–10)</div>
-      <div class="legend-row"><span class="legend-dot" style="background:#dc3545"></span>Critical (6–8)</div>
-      <div class="legend-row"><span class="legend-dot" style="background:#fd7e14"></span>Severe (4–6)</div>
-      <div class="legend-row"><span class="legend-dot" style="background:#ffc107"></span>Moderate (2–4)</div>
-      <div class="legend-row"><span class="legend-dot" style="background:#28a745"></span>Good (0–2)</div>
-      <hr style="border-color:rgba(255,255,255,.15);margin:8px 0"/>
-      <div style="font-size:.68rem;color:rgba(255,255,255,.5)">Marker size = severity<br>Pulse = Emergency road</div>
+    <div class="legend-box" id="legend-box">
+      <h6><i class="fas fa-circle-info" style="color:var(--accent);margin-right:6px"></i>Severity Legend</h6>
+      <div class="legend-row"><span class="l-dot" style="background:var(--c-emergency);box-shadow:0 0 6px var(--c-emergency)"></span> Emergency (8–10) · Fix Today</div>
+      <div class="legend-row"><span class="l-dot" style="background:var(--c-critical);box-shadow:0 0 5px var(--c-critical)"></span> Critical (6–8) · Within 7 days</div>
+      <div class="legend-row"><span class="l-dot" style="background:var(--c-severe)"></span> Severe (4–6) · Within 30 days</div>
+      <div class="legend-row"><span class="l-dot" style="background:var(--c-moderate)"></span> Moderate (2–4) · Monitor</div>
+      <div class="legend-row"><span class="l-dot" style="background:var(--c-good)"></span> Good (0–2) · No action</div>
+      <hr class="legend-hr"/>
+      <p class="legend-note">● Pulsing circle = Emergency<br>● Marker size reflects severity<br>● City Score = avg road quality</p>
     </div>
   </div>
-</div>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
-// ═══════════════════════════════════════════════════
-//  MAP INIT
-// ═══════════════════════════════════════════════════
-const BASEMAPS = [
-  { name:"Dark",   url:"https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" },
-  { name:"Light",  url:"https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" },
-  { name:"Street", url:"https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" },
-  { name:"Satellite", url:"https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}" },
+// ══════════════════════════════════════════════
+//  FIX 1: DYNAMIC MAP POSITIONING
+//  Measures actual navbar height and sets map top
+// ══════════════════════════════════════════════
+function fixMapPosition() {
+  const shell = document.getElementById("map-shell");
+  // Try to find the navbar — common selectors
+  const nav = document.querySelector("nav, .navbar, header, .topbar, .top-bar, #navbar, #topbar, #header");
+  let navH = 60; // safe default
+  if (nav) {
+    const rect = nav.getBoundingClientRect();
+    navH = rect.bottom; // distance from top of viewport to bottom of navbar
+  }
+  shell.style.top = navH + "px";
+  // Also handle the page padding that base.html may add
+  shell.style.position = "fixed";
+  shell.style.left = "0";
+  shell.style.right = "0";
+  shell.style.bottom = "0";
+  // Force map to redraw after resize
+  setTimeout(() => { if (window._leafletMap) window._leafletMap.invalidateSize(); }, 100);
+}
+// Run on load and resize
+window.addEventListener("DOMContentLoaded", fixMapPosition);
+window.addEventListener("resize", fixMapPosition);
+// Also run after a short delay to catch dynamic navbars
+setTimeout(fixMapPosition, 200);
+setTimeout(fixMapPosition, 500);
+
+// ══════════════════════════════════════════════
+//  BASEMAPS (all free)
+// ══════════════════════════════════════════════
+const MAPS = [
+  { name:"Dark",     url:"https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", sub:"abcd" },
+  { name:"HOT OSM",  url:"https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png", sub:"abc" },
+  { name:"Street",   url:"https://tile.openstreetmap.org/{z}/{x}/{y}.png", sub:"" },
+  { name:"Topo",     url:"https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png", sub:"abc" },
 ];
-let basemapIdx = 0;
+let mapIdx = 0;
 
-const map = L.map("map", { zoomControl:false, attributionControl:false })
+const map = L.map("map", { zoomControl:false, attributionControl:true })
               .setView([17.6868, 75.9079], 13);
+window._leafletMap = map; // expose for fixMapPosition
 
-let tileLayer = L.tileLayer(BASEMAPS[0].url, {subdomains:"abcd",maxZoom:22}).addTo(map);
-L.control.zoom({position:"bottomright"}).addTo(map);
+let tileLayer = L.tileLayer(MAPS[0].url, { subdomains:MAPS[0].sub||"abc", maxZoom:22 }).addTo(map);
+L.control.zoom({ position:"bottomright" }).addTo(map);
 
-// ═══════════════════════════════════════════════════
+// ══════════════════════════════════════════════
 //  STATE
-// ═══════════════════════════════════════════════════
-let allData       = [];
-let currentView   = "markers";
-let currentFilter = "";
-let activeItem    = null;
-let heatLayer     = null;
-let markersGroup  = L.layerGroup().addTo(map);
-let routeGroup    = L.layerGroup().addTo(map);
-let userMarker    = null;
+// ══════════════════════════════════════════════
+let allData     = [];
+let currentView = "markers";
+let filterLevel = "";
+let activeId    = null;
+let userMarker  = null;
+let heatLayer   = null;
 
-// Route playback state
-let routePoints   = [];
-let routeIdx      = 0;
-let routePlaying  = false;
-let routeTimer    = null;
-let routeMarker   = null;
-let routePolyline = null;
+const markersGroup = L.layerGroup().addTo(map);
+const routeGroup   = L.layerGroup().addTo(map);
+const labelGroup   = L.layerGroup().addTo(map);
 
-// ═══════════════════════════════════════════════════
-//  ICON FACTORY
-// ═══════════════════════════════════════════════════
-function makeIcon(color, score, isPulse) {
-  const s = score >= 8 ? 32 : score >= 6 ? 26 : score >= 4 ? 20 : 16;
-  const pulse = isPulse ? `
-    <div style="position:absolute;width:${s+12}px;height:${s+12}px;border-radius:50%;
-      border:2px solid ${color};top:${-6}px;left:${-6}px;animation:pulse-ring 2s infinite;opacity:.5"></div>` : "";
-  const html = `
-    <div style="position:relative;width:${s}px;height:${s}px">
-      ${pulse}
-      <div style="width:${s}px;height:${s}px;border-radius:50%;background:${color};
-        border:3px solid rgba(255,255,255,.7);box-shadow:0 0 14px ${color}99,0 2px 8px rgba(0,0,0,.3);
-        display:flex;align-items:center;justify-content:center;color:#fff;font-weight:900;font-size:${Math.max(8,s*0.35)}px">
-        ${score >= 6 ? "!" : ""}
-      </div>
-    </div>`;
-  return L.divIcon({html, iconSize:[s,s], iconAnchor:[s/2,s/2], className:""});
+let rpPoints = [], rpIdx = 0, rpPlaying = false, rpTimer = null, rpMarker = null;
+
+// ══════════════════════════════════════════════
+//  SEVERITY COLORS
+// ══════════════════════════════════════════════
+const SEV = { Emergency:"#ff2d4a", Critical:"#ff6b35", Severe:"#ffb800", Moderate:"#4ecb71", Good:"#3dd6f5" };
+function getColor(d) { return d.color || SEV[d.level] || "#888"; }
+const TYPE_CLR = { "Pothole":"#ff2d4a", "Alligator Crack":"#ff6b35", "Transverse Crack":"#4f9cff", "Longitudinal Crack":"#4ecb71" };
+
+// ══════════════════════════════════════════════
+//  FIX 2: INDIAN REPAIR COST ENGINE
+//
+//  Based on NRRDA / PWD India 2024 rates:
+//  - Small pothole (<0.5 sqm): Cold mix patch ₹800–1,200
+//  - Medium pothole (0.5–2 sqm): Hot mix patch ₹3,000–6,000
+//  - Large pothole (>2 sqm): Full depth repair ₹15,000–25,000
+//  - Alligator crack: Mill & overlay ₹180–220/sqm
+//  - Transverse crack: Crack sealing ₹80–120/m
+//  - Longitudinal crack: Routing & sealing ₹60–90/m
+//
+//  Materials included: Bitumen (~₹55,000/MT 2024),
+//  Sand+aggregate (~₹800/MT), Labour (India avg ₹450/day)
+// ══════════════════════════════════════════════
+const INDIA_REPAIR = {
+  "Pothole": {
+    small:  { area_sqm: 0.25, cost: 1800,  desc: "Cold mix patch (0.25 sqm)" },
+    medium: { area_sqm: 1.0,  cost: 5500,  desc: "Hot mix patch (1 sqm)" },
+    large:  { area_sqm: 3.0,  cost: 22000, desc: "Full depth repair (3 sqm)" },
+  },
+  "Alligator Crack": {
+    small:  { area_sqm: 2,  cost: 4500,  desc: "Crack seal + thin overlay" },
+    medium: { area_sqm: 8,  cost: 16000, desc: "Mill & overlay (8 sqm)" },
+    large:  { area_sqm: 20, cost: 42000, desc: "Full resurfacing (20 sqm)" },
+  },
+  "Transverse Crack": {
+    small:  { length_m: 2,  cost: 320,  desc: "Crack routing & sealing (2m)" },
+    medium: { length_m: 8,  cost: 900,  desc: "Crack sealing (8m)" },
+    large:  { length_m: 20, cost: 2200, desc: "Crack fill + patch (20m)" },
+  },
+  "Longitudinal Crack": {
+    small:  { length_m: 5,  cost: 400,  desc: "Routing & sealant (5m)" },
+    medium: { length_m: 15, cost: 1100, desc: "Crack sealing (15m)" },
+    large:  { length_m: 40, cost: 3000, desc: "Reseal + overlay (40m)" },
+  },
+};
+
+// Indian breakdown: labour, material, equipment per defect type
+const COST_BREAKDOWN = {
+  "Pothole": {
+    labour_pct: 0.30,    // ₹ labour cost %
+    material_pct: 0.55,  // Bitumen, aggregate
+    equipment_pct: 0.15, // Plate compactor, machine
+    material_items: ["Bitumen (BC mix)", "Coarse aggregate", "Fine sand", "Tack coat"],
+  },
+  "Alligator Crack": {
+    labour_pct: 0.25,
+    material_pct: 0.60,
+    equipment_pct: 0.15,
+    material_items: ["Bitumen emulsion", "SDBC overlay", "Aggregate chips", "Primer coat"],
+  },
+  "Transverse Crack": {
+    labour_pct: 0.40,
+    material_pct: 0.45,
+    equipment_pct: 0.15,
+    material_items: ["Crack sealant (hot pour)", "Sand blinding", "Bond coat"],
+  },
+  "Longitudinal Crack": {
+    labour_pct: 0.40,
+    material_pct: 0.45,
+    equipment_pct: 0.15,
+    material_items: ["Rubberised sealant", "Routing compound", "Aggregate seal"],
+  },
+};
+
+function calcIndianRepairCost(detections, score) {
+  if (!detections || detections.length === 0) return { total: 0, items: [] };
+
+  let grandTotal = 0;
+  let allItems = [];
+
+  detections.forEach(det => {
+    const label = det.label || det.class || "Pothole";
+    const conf  = det.confidence || 0.8;
+    const bbox  = det.bbox || [0,0,100,100];
+    const bboxW = bbox[2] - bbox[0];
+    const bboxH = bbox[3] - bbox[1];
+    const bboxArea = bboxW * bboxH; // pixels squared
+    // Pixel area heuristic → physical size category
+    // <5000 px² = small, 5000–20000 = medium, >20000 = large
+    const sizeKey = bboxArea < 5000 ? "small" : bboxArea < 20000 ? "medium" : "large";
+
+    const repair = INDIA_REPAIR[label] || INDIA_REPAIR["Pothole"];
+    const tier   = repair[sizeKey] || repair.medium;
+    const breakdown = COST_BREAKDOWN[label] || COST_BREAKDOWN["Pothole"];
+
+    const base    = tier.cost;
+    const labour  = Math.round(base * breakdown.labour_pct);
+    const mat     = Math.round(base * breakdown.material_pct);
+    const equip   = Math.round(base * breakdown.equipment_pct);
+    const total   = labour + mat + equip;
+
+    grandTotal += total;
+    allItems.push({ label, desc: tier.desc, sizeKey, labour, material: mat, equipment: equip, total, breakdown });
+  });
+
+  // Add 5% GST + 3% contractor overhead (India standard)
+  const gst        = Math.round(grandTotal * 0.05);
+  const contractor = Math.round(grandTotal * 0.03);
+  const finalTotal = grandTotal + gst + contractor;
+
+  return { total: finalTotal, subtotal: grandTotal, gst, contractor, items: allItems };
 }
 
-// ═══════════════════════════════════════════════════
-//  POPUP FACTORY
-// ═══════════════════════════════════════════════════
-const SEV_COLORS = {Good:"#28a745",Moderate:"#ffc107",Severe:"#fd7e14",Critical:"#dc3545",Emergency:"#7b0000"};
-const TYPE_BG    = {"Pothole":"#e94560","Alligator Crack":"#fd7e14","Transverse Crack":"#0f3460","Longitudinal Crack":"#28a745"};
+// ══════════════════════════════════════════════
+//  FIX 3: PROPER CITY HEALTH SCORE
+//
+//  OLD: avg = sum(scores) / count → 1 bad road crashes score
+//  NEW: Weighted + road-count-aware scoring
+//       - Base = 100
+//       - Each road deducts based on severity × weight
+//       - Max deduction per road capped to prevent 1 road = 0
+//       - Roads > 6 months old get reduced weight (inspector issue, not road issue)
+// ══════════════════════════════════════════════
+function calcCityHealth(roads) {
+  if (!roads || roads.length === 0) return 100;
 
-function fmtEco(v) {
+  // Separate real detected roads from "Good" roads (score < 2)
+  const badRoads  = roads.filter(r => r.score >= 2);
+  const goodRoads = roads.filter(r => r.score < 2);
+
+  if (badRoads.length === 0) return 100;
+
+  // Each bad road deducts from 100, but deduction is:
+  //   - Proportional to severity (score/10)
+  //   - Capped per road: max 15 points per road regardless of count
+  //   - Diminishing returns: more roads = less per-road weight
+  const maxDeductTotal = 85; // city can't go below 15 just from road issues
+  const roadWeight = Math.min(15, maxDeductTotal / Math.max(1, badRoads.length));
+
+  let totalDeduction = 0;
+  badRoads.forEach(r => {
+    const severityFactor = r.score / 10; // 0–1
+    const deduction = roadWeight * severityFactor;
+    totalDeduction += deduction;
+  });
+
+  const health = Math.max(10, Math.min(100, 100 - totalDeduction));
+  return Math.round(health * 10) / 10;
+}
+
+// ══════════════════════════════════════════════
+//  FIX 4: BETTER SCORING DISPLAY
+//  Show contextual score meaning, not raw number
+// ══════════════════════════════════════════════
+function getScoreContext(score) {
+  if (score >= 9)   return { label:"Emergency",  msg:"Immediate repair",   color:"#ff2d4a" };
+  if (score >= 7.5) return { label:"Emergency",  msg:"Fix today",           color:"#ff2d4a" };
+  if (score >= 6)   return { label:"Critical",   msg:"Fix within 7 days",   color:"#ff6b35" };
+  if (score >= 4.5) return { label:"Severe",     msg:"Fix within 30 days",  color:"#ffb800" };
+  if (score >= 3)   return { label:"Moderate",   msg:"Monitor & plan",      color:"#ffd966" };
+  if (score >= 1.5) return { label:"Low Risk",   msg:"Minor defect noted",  color:"#4ecb71" };
+  return                   { label:"Good",       msg:"No action needed",    color:"#3dd6f5" };
+}
+
+// ══════════════════════════════════════════════
+//  FORMAT HELPERS
+// ══════════════════════════════════════════════
+function rupee(v) {
+  if (!v || v === 0) return "₹0";
+  if (v >= 10000000) return "₹" + (v/10000000).toFixed(1) + "Cr";
+  if (v >= 100000)   return "₹" + (v/100000).toFixed(1)   + "L";
+  if (v >= 1000)     return "₹" + (v/1000).toFixed(1)     + "K";
+  return "₹" + Math.round(v).toLocaleString("en-IN");
+}
+function rupeeK(v) {
   if (!v) return "₹0";
-  return v >= 10000000 ? "₹"+(v/10000000).toFixed(1)+"Cr" : v >= 100000 ? "₹"+(v/100000).toFixed(1)+"L" : "₹"+v.toLocaleString("en-IN");
+  if (v >= 100000) return "₹" + (v/100000).toFixed(1) + "L";
+  if (v >= 1000)   return "₹" + Math.round(v/1000) + "K";
+  return "₹" + Math.round(v);
 }
-function fmtDate(ts) { return ts ? ts.replace("T"," ").substring(0,16) : "—"; }
 
+// ══════════════════════════════════════════════
+//  MARKER ICON
+// ══════════════════════════════════════════════
+function makeIcon(d) {
+  const score = d.score || 0;
+  const color = getColor(d);
+  const size  = score >= 8 ? 34 : score >= 6 ? 27 : score >= 4 ? 21 : 16;
+  const pulse = score >= 8;
+  const inner = score >= 6 ? "!" : score >= 4 ? "▲" : "";
+
+  const ring = pulse ? `<div style="position:absolute;width:${size+14}px;height:${size+14}px;border-radius:50%;border:2.5px solid ${color};top:-7px;left:-7px;animation:pulse-ring 2.2s infinite;opacity:.6;"></div>` : "";
+  const html = `<div style="position:relative;width:${size}px;height:${size}px;">${ring}<div style="width:${size}px;height:${size}px;border-radius:50%;background:${color};border:3px solid rgba(255,255,255,.8);box-shadow:0 0 14px ${color}bb,0 3px 10px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:900;font-size:${Math.max(8,Math.floor(size*.38))}px;font-family:'Rajdhani',sans-serif;">${inner}</div></div>`;
+
+  return L.divIcon({ html, iconSize:[size,size], iconAnchor:[size/2,size/2], className:"" });
+}
+
+// ══════════════════════════════════════════════
+//  POPUP BUILDER — with Indian repair cost breakdown
+// ══════════════════════════════════════════════
 function buildPopup(d) {
-  const color = d.color || SEV_COLORS[d.level] || "#888";
-  const typesHTML = (d.all_detections||[]).map(t =>
-    `<span class="pop-type-chip" style="background:${TYPE_BG[t.label]||'#888'}">${t.label}×${t.count}</span>`
-  ).join("") || '<span style="color:#aaa;font-size:.72rem">No damage types</span>';
+  const color   = getColor(d);
+  const ctx     = getScoreContext(d.score);
+  const dets    = d.detections || d.all_detections || [];
+  const hasRoute = (d.route_points||[]).length > 1;
 
-  const routePts = d.route_points || [];
-  const hasRoute = routePts.length > 1;
+  // Calculate repair cost
+  const cost = calcIndianRepairCost(dets, d.score);
 
-  return `<div class="rs-popup">
-    <div class="pop-header">
+  const types = dets.map(t =>
+    `<span class="pop-type" style="background:${TYPE_CLR[t.label||t.class]||'#555'}">${t.label||t.class} ×${t.count||1}</span>`
+  ).join("") || `<span style="color:rgba(255,255,255,.3);font-size:.68rem">No types recorded</span>`;
+
+  // Cost breakdown table
+  let costHTML = "";
+  if (cost.total > 0) {
+    const topItem = cost.items[0];
+    const bd = topItem ? COST_BREAKDOWN[topItem.label] || COST_BREAKDOWN["Pothole"] : null;
+    costHTML = `
+    <div class="cost-box">
+      <div class="cost-box-title">📋 Repair Cost Estimate (India PWD Rates)</div>
+      ${topItem ? `<div class="cost-line"><span class="cl">Work Type</span><span class="cv">${topItem.desc}</span></div>` : ""}
+      ${topItem ? `<div class="cost-line"><span class="cl">👷 Labour (${bd?Math.round(bd.labour_pct*100):30}%)</span><span class="cv">${rupeeK(topItem.labour)}</span></div>` : ""}
+      ${topItem ? `<div class="cost-line"><span class="cl">🧱 Materials (Bitumen+Agg)</span><span class="cv">${rupeeK(topItem.material)}</span></div>` : ""}
+      ${topItem ? `<div class="cost-line"><span class="cl">⚙️ Equipment</span><span class="cv">${rupeeK(topItem.equipment)}</span></div>` : ""}
+      ${cost.gst > 0 ? `<div class="cost-line"><span class="cl">GST @5%</span><span class="cv">${rupeeK(cost.gst)}</span></div>` : ""}
+      ${cost.contractor > 0 ? `<div class="cost-line"><span class="cl">Contractor overhead</span><span class="cv">${rupeeK(cost.contractor)}</span></div>` : ""}
+      <div class="cost-total"><span class="ct-l">Total Estimate</span><span class="ct-v">${rupee(cost.total)}</span></div>
+    </div>`;
+  }
+
+  return `
+  <div class="rs-popup">
+    <div class="pop-head">
       <div class="pop-road">📍 ${d.road_name}</div>
-      <span class="pop-score" style="background:${color}">${d.score}/10 — ${d.level}</span>
+      <span class="pop-badge" style="background:${color}20;border:1px solid ${color}55;color:${color}">
+        <strong style="font-family:'Rajdhani',sans-serif;font-size:1rem">${d.score}/10</strong> — ${ctx.label}
+      </span>
+      <div class="pop-bar" style="margin-top:7px"><div class="pop-bar-fill" style="width:${d.score*10}%;background:${color}"></div></div>
+      <div style="font-size:.67rem;color:${color};margin-top:4px;font-weight:700">⏱ ${ctx.msg}</div>
     </div>
-    <div class="pop-row"><span class="pop-key">Frames Captured</span><span class="pop-val">${d.frames_captured||1}</span></div>
-    <div class="pop-row"><span class="pop-key">Defect Frames</span><span class="pop-val" style="color:#e94560">${d.defect_frames||0}</span></div>
-    <div class="pop-row"><span class="pop-key">Economic Risk/30d</span><span class="pop-val" style="color:#e94560">${fmtEco(d.economic_impact)}</span></div>
-    <div class="pop-row"><span class="pop-key">Required Action</span><span class="pop-val">${d.repair_action||"—"}</span></div>
-    <div class="pop-row"><span class="pop-key">Inspected By</span><span class="pop-val">${d.officer||"—"}</span></div>
-    <div class="pop-row"><span class="pop-key">Date / Time</span><span class="pop-val">${d.inspection_date||""} ${d.inspection_time||""}</span></div>
-    <div class="pop-row"><span class="pop-key">GPS</span><span class="pop-val" style="font-size:.7rem;font-family:monospace">${(d.lat||0).toFixed(5)}, ${(d.lng||0).toFixed(5)}</span></div>
-    <div class="pop-types">${typesHTML}</div>
+    <div class="pop-rows">
+      <div class="pop-row"><span class="pk">📊 Frames Analyzed</span><span class="pv">${d.frames_captured||1}</span></div>
+      <div class="pop-row"><span class="pk">⚠️ Defect Frames</span><span class="pv" style="color:${color}">${d.defect_frames||0}</span></div>
+      <div class="pop-row"><span class="pk">👤 Inspected By</span><span class="pv">${d.officer||"—"}</span></div>
+      <div class="pop-row"><span class="pk">📅 Date</span><span class="pv">${d.inspection_date||""} ${d.inspection_time||""}</span></div>
+      <div class="pop-row"><span class="pk">📍 GPS</span><span class="pv" style="font-family:monospace;font-size:.66rem">${(d.lat||0).toFixed(5)}, ${(d.lng||0).toFixed(5)}</span></div>
+    </div>
+    <div class="pop-types">${types}</div>
+    ${costHTML}
     ${d.annotated_img ? `<img class="pop-img" src="${d.annotated_img}" onerror="this.style.display='none'" alt="Detection"/>` : ""}
     <div class="pop-actions">
-      <a href="/api/report/${d.id}" target="_blank" class="pop-btn" style="background:#e94560;color:#fff"><i class="fas fa-file-pdf me-1"></i>PDF</a>
-      ${hasRoute ? `<button class="pop-btn" style="background:#0f3460;color:#fff" onclick="showRoute(${JSON.stringify(routePts).replace(/"/g,'&quot;')}, '${d.road_name}')"><i class="fas fa-route me-1"></i>Route</button>` : ""}
-      <button class="pop-btn" style="background:#f0f2f5;color:#1a1a2e" onclick="map.closePopup()">Close</button>
+      <a href="/api/report/${d.id}" target="_blank" class="pop-btn" style="background:#ff5b7f;color:#fff"><i class="fas fa-file-pdf"></i> PDF</a>
+      ${hasRoute ? `<button class="pop-btn" style="background:#4f9cff22;color:#4f9cff;border:1px solid #4f9cff44" onclick="showRoute(${JSON.stringify(d.route_points||[])}, '${(d.road_name||'').replace(/'/g,"\\'")}')"><i class="fas fa-route"></i> Route</button>` : ""}
+      <button class="pop-btn" style="background:rgba(255,255,255,.06);color:#bbb" onclick="navigator.clipboard.writeText('${d.lat},${d.lng}').then(()=>{this.textContent='✓ Copied'})"><i class="fas fa-copy"></i> GPS</button>
     </div>
   </div>`;
 }
 
-// ═══════════════════════════════════════════════════
-//  RENDER FUNCTIONS
-// ═══════════════════════════════════════════════════
+// ══════════════════════════════════════════════
+//  RENDER: MARKERS
+// ══════════════════════════════════════════════
 function renderMarkers(data) {
-  markersGroup.clearLayers();
+  markersGroup.clearLayers(); labelGroup.clearLayers(); removeHeat();
   data.forEach(d => {
-    const color   = d.color || SEV_COLORS[d.level] || "#888";
-    const isPulse = d.score >= 8;
-    const marker  = L.marker([d.lat, d.lng], {icon: makeIcon(color, d.score, isPulse)});
-    marker.bindPopup(buildPopup(d), {maxWidth:300, className:"rs-popup-wrap"});
-    marker.on("click", () => highlightSidebarItem(d.id));
-    markersGroup.addLayer(marker);
-  });
-}
-
-function renderCluster(data) {
-  // Simple cluster: group points within ~0.01 degrees
-  markersGroup.clearLayers();
-  const clusters = {};
-  data.forEach(d => {
-    const key = `${(d.lat*100).toFixed(0)}_${(d.lng*100).toFixed(0)}`;
-    if (!clusters[key]) clusters[key] = {items:[], lat:d.lat, lng:d.lng};
-    clusters[key].items.push(d);
-  });
-  Object.values(clusters).forEach(c => {
-    const worst = c.items.reduce((a,b) => a.score > b.score ? a : b);
-    const color  = worst.color || SEV_COLORS[worst.level] || "#888";
-    const count  = c.items.length;
-    const size   = Math.min(50, 28 + count * 4);
-    const html   = `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${color};
-      border:3px solid rgba(255,255,255,.7);box-shadow:0 0 14px ${color}88;
-      display:flex;align-items:center;justify-content:center;color:#fff;font-weight:900;font-size:${Math.max(10,size*0.35)}px">
-      ${count > 1 ? count : "!"}</div>`;
-    const m = L.marker([c.lat, c.lng], {icon: L.divIcon({html, iconSize:[size,size], iconAnchor:[size/2,size/2], className:""})});
-    m.bindPopup(buildPopup(worst), {maxWidth:300});
+    if (!d.lat || !d.lng) return;
+    const m = L.marker([d.lat, d.lng], { icon: makeIcon(d) });
+    m.bindPopup(buildPopup(d), { maxWidth:320 });
+    m.on("click", () => highlightItem(d.id));
     markersGroup.addLayer(m);
   });
 }
 
-function renderHeat(data) {
-  if (heatLayer) { map.removeLayer(heatLayer); heatLayer = null; }
-  markersGroup.clearLayers();
-  const pts = data.map(d => [d.lat, d.lng, Math.min(1, d.score / 10)]);
-  heatLayer = L.heatLayer(pts, {
-    radius: 35, blur: 25, maxZoom: 17,
-    gradient: {0.0:"#28a745", 0.25:"#ffc107", 0.5:"#fd7e14", 0.75:"#dc3545", 1.0:"#7b0000"}
-  }).addTo(map);
+// ══════════════════════════════════════════════
+//  RENDER: LABELS
+// ══════════════════════════════════════════════
+function renderLabels(data) {
+  markersGroup.clearLayers(); labelGroup.clearLayers(); removeHeat();
+  data.forEach(d => {
+    if (!d.lat || !d.lng) return;
+    const color = getColor(d);
+    const score = d.score || 0;
+    const name  = d.road_name.length > 15 ? d.road_name.substring(0,14)+"…" : d.road_name;
+    const html  = `
+      <div style="display:flex;flex-direction:column;align-items:center;gap:2px">
+        <div style="background:${color};color:${score>=3?'#000':'#fff'};padding:4px 10px 4px 8px;border-radius:20px;font-family:'Rajdhani',sans-serif;font-size:12px;font-weight:700;white-space:nowrap;box-shadow:0 2px 10px ${color}99,0 1px 4px rgba(0,0,0,.6);border:2px solid rgba(255,255,255,.35);display:flex;align-items:center;gap:5px;letter-spacing:.3px;">
+          <span style="background:rgba(0,0,0,.25);border-radius:10px;padding:0 5px;font-size:11px">${score}</span>${name}
+        </div>
+        <div style="width:2px;height:7px;background:${color};border-radius:0 0 2px 2px"></div>
+        <div style="width:6px;height:6px;border-radius:50%;background:${color};border:2px solid rgba(255,255,255,.7);margin-top:-3px;box-shadow:0 0 5px ${color}"></div>
+      </div>`;
+    const w = Math.min(190, name.length * 8 + 55);
+    const m = L.marker([d.lat,d.lng], { icon: L.divIcon({ html, iconSize:[w,40], iconAnchor:[w/2,40], className:"" }) });
+    m.bindPopup(buildPopup(d), { maxWidth:320 });
+    m.on("click", () => highlightItem(d.id));
+    labelGroup.addLayer(m);
+  });
 }
 
-// ═══════════════════════════════════════════════════
-//  ROUTE VIEW — shows the actual drive path
-// ═══════════════════════════════════════════════════
-function renderRoutes(data) {
-  markersGroup.clearLayers();
-  routeGroup.clearLayers();
+// ══════════════════════════════════════════════
+//  RENDER: HEATMAP (custom Canvas overlay — no plugin)
+// ══════════════════════════════════════════════
+function removeHeat() {
+  if (heatLayer) { map.removeLayer(heatLayer); heatLayer = null; }
+}
+
+const HeatOverlay = L.Layer.extend({
+  initialize(data, opts) { this._data=data; this._opts=opts||{}; },
+  onAdd(map) {
+    this._map = map;
+    this._canvas = document.createElement("canvas");
+    this._canvas.style.cssText = "position:absolute;top:0;left:0;pointer-events:none;";
+    map.getPanes().overlayPane.appendChild(this._canvas);
+    map.on("moveend zoomend resize", this._redraw, this);
+    this._redraw();
+  },
+  onRemove(map) {
+    map.getPanes().overlayPane.removeChild(this._canvas);
+    map.off("moveend zoomend resize", this._redraw, this);
+  },
+  _redraw() {
+    const size = this._map.getSize();
+    const cv   = this._canvas;
+    cv.width = size.x; cv.height = size.y;
+    const ctx = cv.getContext("2d");
+    ctx.clearRect(0,0,cv.width,cv.height);
+    L.DomUtil.setPosition(cv, this._map.containerPointToLayerPoint([0,0]));
+    const r = this._opts.radius || 52;
+    this._data.forEach(d => {
+      if (!d.lat || !d.lng) return;
+      const pt = this._map.latLngToContainerPoint([d.lat, d.lng]);
+      const intensity = Math.min(1, (d.score||0)/10);
+      const alpha = 0.5 * intensity + 0.1;
+      const g = ctx.createRadialGradient(pt.x, pt.y, 0, pt.x, pt.y, r);
+      if      (d.score>=8) { g.addColorStop(0,`rgba(255,45,74,${alpha})`);   g.addColorStop(1,"rgba(255,45,74,0)"); }
+      else if (d.score>=6) { g.addColorStop(0,`rgba(255,107,53,${alpha})`);  g.addColorStop(1,"rgba(255,107,53,0)"); }
+      else if (d.score>=4) { g.addColorStop(0,`rgba(255,184,0,${alpha})`);   g.addColorStop(1,"rgba(255,184,0,0)"); }
+      else if (d.score>=2) { g.addColorStop(0,`rgba(78,203,113,${alpha*.7})`); g.addColorStop(1,"rgba(78,203,113,0)"); }
+      else                 { g.addColorStop(0,`rgba(61,214,245,${alpha*.4})`); g.addColorStop(1,"rgba(61,214,245,0)"); }
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(pt.x, pt.y, r, 0, Math.PI*2); ctx.fill();
+    });
+  }
+});
+
+function renderHeat(data) {
+  markersGroup.clearLayers(); labelGroup.clearLayers(); removeHeat();
+  if (!data.length) return;
+  heatLayer = new HeatOverlay(data, { radius:55 });
+  map.addLayer(heatLayer);
   data.forEach(d => {
-    const pts = d.route_points || [];
+    if (!d.lat || !d.lng) return;
+    const dot = L.circleMarker([d.lat,d.lng], { radius:5, fillColor:getColor(d), color:"rgba(255,255,255,.5)", weight:1.5, fillOpacity:.9 });
+    dot.bindPopup(buildPopup(d), { maxWidth:320 });
+    dot.on("click", () => highlightItem(d.id));
+    markersGroup.addLayer(dot);
+  });
+}
+
+// ══════════════════════════════════════════════
+//  RENDER: ROUTES
+// ══════════════════════════════════════════════
+function renderRoutes(data) {
+  markersGroup.clearLayers(); labelGroup.clearLayers(); routeGroup.clearLayers(); removeHeat();
+  data.forEach(d => {
+    if (!d.lat || !d.lng) return;
+    const pts   = d.route_points || [];
+    const color = getColor(d);
     if (pts.length < 2) {
-      // Single point — just marker
-      const color = d.color || "#888";
-      const m = L.marker([d.lat, d.lng], {icon: makeIcon(color, d.score, d.score >= 8)});
-      m.bindPopup(buildPopup(d), {maxWidth:300});
+      const m = L.marker([d.lat,d.lng], { icon:makeIcon(d) });
+      m.bindPopup(buildPopup(d), { maxWidth:320 });
       markersGroup.addLayer(m);
       return;
     }
-    // Draw route line colored by per-point severity
     const latlngs = pts.map(p => [p.lat, p.lng]);
-    const lineColor = d.color || SEV_COLORS[d.level] || "#888";
-    const poly = L.polyline(latlngs, {
-      color: lineColor, weight: 5, opacity: 0.8,
-      dashArray: d.score < 4 ? "8,6" : null
-    });
-    poly.bindPopup(buildPopup(d), {maxWidth:300});
+    const poly = L.polyline(latlngs, { color, weight:5, opacity:.85, dashArray:d.score<4?"10,7":null, lineCap:"round", lineJoin:"round" });
+    poly.bindPopup(buildPopup(d), { maxWidth:320 });
     routeGroup.addLayer(poly);
-
-    // Start/end markers
-    L.circleMarker(latlngs[0], {radius:5, fillColor:"#28a745", color:"#fff", weight:2, fillOpacity:1})
-      .bindTooltip("Start: "+d.road_name).addTo(routeGroup);
-    L.circleMarker(latlngs[latlngs.length-1], {radius:5, fillColor:lineColor, color:"#fff", weight:2, fillOpacity:1})
+    L.circleMarker(latlngs[0], { radius:6, fillColor:"#4ecb71", color:"#fff", weight:2, fillOpacity:1 })
+      .bindTooltip("🟢 Start: "+d.road_name).addTo(routeGroup);
+    L.circleMarker(latlngs[latlngs.length-1], { radius:6, fillColor:color, color:"#fff", weight:2, fillOpacity:1 })
       .bindTooltip("End: "+d.road_name).addTo(routeGroup);
-
-    // Defect dots along the route
     pts.forEach(p => {
       if (p.score >= 4) {
-        const c = p.score >= 8 ? "#7b0000" : p.score >= 6 ? "#dc3545" : "#fd7e14";
-        L.circleMarker([p.lat, p.lng], {radius:4, fillColor:c, color:"#fff", weight:1.5, fillOpacity:1})
-          .addTo(routeGroup);
+        const c = p.score>=8?"#ff2d4a":p.score>=6?"#ff6b35":"#ffb800";
+        L.circleMarker([p.lat,p.lng], { radius:4, fillColor:c, color:"#fff", weight:1, fillOpacity:1 }).addTo(routeGroup);
       }
     });
   });
 }
 
-// ═══════════════════════════════════════════════════
+// ══════════════════════════════════════════════
 //  ROUTE PLAYBACK
-// ═══════════════════════════════════════════════════
+// ══════════════════════════════════════════════
 function showRoute(pts, name) {
-  map.closePopup();
-  switchView("route");
-  routePoints = pts;
-  routeIdx    = 0;
-  document.getElementById("route-panel").classList.add("show");
-  document.getElementById("rp-label").textContent = name + " — Point 0/" + pts.length;
-  updateRouteMarker();
+  map.closePopup(); switchView("route");
+  rpPoints=pts; rpIdx=0;
+  document.getElementById("route-bar").classList.add("show");
+  updateRpMarker();
+}
+function updateRpMarker() {
+  if (!rpPoints.length) return;
+  const p = rpPoints[rpIdx];
+  if (rpMarker) routeGroup.removeLayer(rpMarker);
+  const score=p.score||0;
+  const color=score>=8?"#ff2d4a":score>=6?"#ff6b35":score>=4?"#ffb800":"#4ecb71";
+  rpMarker=L.marker([p.lat,p.lng],{icon:L.divIcon({html:`<div style="width:20px;height:20px;border-radius:50%;background:${color};border:3px solid #fff;box-shadow:0 0 14px ${color}"></div>`,iconSize:[20,20],iconAnchor:[10,10],className:""})}).addTo(routeGroup);
+  map.setView([p.lat,p.lng],17,{animate:true,duration:.6});
+  document.getElementById("rp-label").textContent=`Pt ${rpIdx+1}/${rpPoints.length} · Score ${score}/10`;
+}
+function rpNext(){ if(rpIdx<rpPoints.length-1){rpIdx++;updateRpMarker();} }
+function rpPrev(){ if(rpIdx>0){rpIdx--;updateRpMarker();} }
+function rpToggle(){
+  rpPlaying=!rpPlaying;
+  document.getElementById("rp-play").innerHTML=rpPlaying?'<i class="fas fa-pause"></i>':'<i class="fas fa-play"></i>';
+  if(rpPlaying){ rpTimer=setInterval(()=>{ if(rpIdx>=rpPoints.length-1){rpToggle();return;} rpIdx++;updateRpMarker(); },700); }
+  else clearInterval(rpTimer);
+}
+function rpStop(){
+  clearInterval(rpTimer); rpPlaying=false; rpPoints=[]; rpIdx=0;
+  if(rpMarker){ routeGroup.removeLayer(rpMarker); rpMarker=null; }
+  document.getElementById("route-bar").classList.remove("show");
+  document.getElementById("rp-play").innerHTML='<i class="fas fa-play"></i>';
 }
 
-function updateRouteMarker() {
-  if (!routePoints.length) return;
-  const p = routePoints[routeIdx];
-  if (!p) return;
-  if (routeMarker) routeGroup.removeLayer(routeMarker);
-  const score = p.score || 0;
-  const color = score >= 8 ? "#7b0000" : score >= 6 ? "#dc3545" : score >= 4 ? "#fd7e14" : "#28a745";
-  routeMarker = L.marker([p.lat, p.lng], {icon: L.divIcon({
-    html:`<div style="width:20px;height:20px;border-radius:50%;background:${color};border:3px solid #fff;box-shadow:0 0 10px ${color}"></div>`,
-    iconSize:[20,20], iconAnchor:[10,10], className:""
-  })}).addTo(routeGroup);
-  map.setView([p.lat, p.lng], 17, {animate:true});
-  document.getElementById("rp-label").textContent =
-    `${document.getElementById("rp-label").textContent.split("—")[0]}— Pt ${routeIdx+1}/${routePoints.length} · Score ${score}/10`;
-}
-
-function playbackNext() { if (routeIdx < routePoints.length-1) { routeIdx++; updateRouteMarker(); } }
-function playbackPrev() { if (routeIdx > 0) { routeIdx--; updateRouteMarker(); } }
-function togglePlayback() {
-  routePlaying = !routePlaying;
-  document.getElementById("rp-play").innerHTML = routePlaying ? '<i class="fas fa-pause"></i>' : '<i class="fas fa-play"></i>';
-  if (routePlaying) {
-    routeTimer = setInterval(() => {
-      if (routeIdx >= routePoints.length - 1) { togglePlayback(); return; }
-      routeIdx++; updateRouteMarker();
-    }, 800);
-  } else {
-    clearInterval(routeTimer);
-  }
-}
-function stopRoute() {
-  clearInterval(routeTimer); routePlaying = false; routePoints = []; routeIdx = 0;
-  if (routeMarker) { routeGroup.removeLayer(routeMarker); routeMarker = null; }
-  document.getElementById("route-panel").classList.remove("show");
-  document.getElementById("rp-play").innerHTML = '<i class="fas fa-play"></i>';
-}
-
-// ═══════════════════════════════════════════════════
+// ══════════════════════════════════════════════
 //  VIEW SWITCHER
-// ═══════════════════════════════════════════════════
+// ══════════════════════════════════════════════
 function switchView(v) {
-  currentView = v;
-  ["vt-markers","vt-cluster","vt-heat","vt-route"].forEach(id =>
-    document.getElementById(id).classList.remove("active")
-  );
-  document.getElementById("vt-"+v).classList.add("active");
-  if (heatLayer) { map.removeLayer(heatLayer); heatLayer = null; }
+  currentView=v;
+  ["markers","labels","heat","route"].forEach(id => document.getElementById("vb-"+id)?.classList.remove("on"));
+  document.getElementById("vb-"+v)?.classList.add("on");
   routeGroup.clearLayers();
-  markersGroup.clearLayers();
-  const filtered = getFiltered();
-  if (v === "markers")  renderMarkers(filtered);
-  else if (v==="cluster") renderCluster(filtered);
-  else if (v==="heat")  renderHeat(filtered);
-  else if (v==="route") renderRoutes(filtered);
+  const f=getFiltered();
+  if(v==="markers") renderMarkers(f);
+  else if(v==="labels") renderLabels(f);
+  else if(v==="heat") renderHeat(f);
+  else if(v==="route") renderRoutes(f);
 }
 
-// ═══════════════════════════════════════════════════
+// ══════════════════════════════════════════════
 //  SIDEBAR
-// ═══════════════════════════════════════════════════
+// ══════════════════════════════════════════════
 function renderSidebar() {
-  const q    = (document.getElementById("road-search").value||"").toLowerCase();
-  let data   = getFiltered();
-  if (q) data = data.filter(d => d.road_name.toLowerCase().includes(q));
-  data = data.slice().sort((a,b) => b.score - a.score);
-
-  const list = document.getElementById("road-list");
-  document.getElementById("sidebar-count") && (document.getElementById("sidebar-count").textContent = data.length);
-
-  if (!data.length) {
-    list.innerHTML = `<div style="text-align:center;padding:40px 16px;color:#aaa;font-size:.82rem">
-      <i class="fas fa-search" style="font-size:2rem;margin-bottom:12px;display:block;opacity:.3"></i>
-      No roads found.</div>`;
+  const q=( document.getElementById("search").value||"").toLowerCase();
+  let data=getFiltered();
+  if(q) data=data.filter(d=>d.road_name.toLowerCase().includes(q));
+  data=[...data].sort((a,b)=>b.score-a.score);
+  const list=document.getElementById("road-list");
+  if(!data.length){
+    list.innerHTML=`<div class="empty-state"><i class="fas fa-road"></i><p>No roads match your filters.</p></div>`;
     return;
   }
-  list.innerHTML = data.map(d => {
-    const color = d.color || SEV_COLORS[d.level] || "#888";
-    const eco   = fmtEco(d.economic_impact);
-    const hasRoute = (d.route_points||[]).length > 1;
-    return `<div class="road-item" id="ri-${d.id}" onclick="clickRoadItem(event,'${d.id}',${d.lat},${d.lng})">
-      <div class="ri-score" style="background:${color}">${d.score}</div>
-      <div class="ri-info">
+  list.innerHTML=data.map(d=>{
+    const color=getColor(d);
+    const ctx=getScoreContext(d.score);
+    const cost=calcIndianRepairCost(d.detections||d.all_detections||[], d.score);
+    const hasRoute=(d.route_points||[]).length>1;
+    return `
+    <div class="road-item ${activeId===d.id?'sel':''}" id="ri-${d.id}" onclick="clickItem('${d.id}',${d.lat},${d.lng})">
+      <div class="ri-score" style="background:${color};${d.score>=6?'box-shadow:0 0 9px '+color+'88':''}">${d.score}</div>
+      <div class="ri-body">
         <div class="ri-name">${d.road_name}</div>
-        <div class="ri-meta">${d.inspection_date||""} · ${d.source||""} ${hasRoute?"· 🛣 route":""}</div>
-        <div class="ri-eco">${eco}/30d</div>
+        <div class="ri-sub">${d.inspection_date||""} · ${(d.source||"").toUpperCase()}${hasRoute?" · 🛣":""}</div>
+        <div class="ri-eco">${rupee(cost.total)} repair${cost.total>0?" est.":""}</div>
       </div>
-      <span class="ri-badge" style="background:${color}">${d.level}</span>
+      <span class="ri-badge" style="background:${color}22;color:${color};border:1px solid ${color}44">${ctx.label}</span>
     </div>`;
   }).join("");
 }
 
-function clickRoadItem(e, id, lat, lng) {
-  const d = allData.find(x => x.id === id);
-  if (!d) return;
-  map.flyTo([lat, lng], 17, {duration:1.2});
-  setTimeout(() => {
-    const marker = findMarkerForData(d);
-    if (marker) marker.openPopup();
-    else L.popup({maxWidth:300}).setLatLng([lat,lng]).setContent(buildPopup(d)).openOn(map);
-  }, 1300);
-  highlightSidebarItem(id);
+function clickItem(id, lat, lng) {
+  const d=allData.find(x=>x.id===id);
+  if(!d) return;
+  highlightItem(id);
+  map.flyTo([lat,lng],17,{duration:1.1,animate:true});
+  setTimeout(()=>L.popup({maxWidth:320}).setLatLng([lat,lng]).setContent(buildPopup(d)).openOn(map),1200);
+}
+function highlightItem(id) {
+  activeId=id;
+  document.querySelectorAll(".road-item").forEach(el=>el.classList.remove("sel"));
+  const el=document.getElementById("ri-"+id);
+  if(el){el.classList.add("sel");el.scrollIntoView({behavior:"smooth",block:"nearest"});}
 }
 
-function findMarkerForData(d) {
-  let found = null;
-  markersGroup.eachLayer(m => {
-    if (m.getLatLng && m.getLatLng().lat === d.lat && m.getLatLng().lng === d.lng) found = m;
-  });
-  return found;
-}
-
-function highlightSidebarItem(id) {
-  document.querySelectorAll(".road-item").forEach(el => el.classList.remove("active-item"));
-  const el = document.getElementById("ri-"+id);
-  if (el) { el.classList.add("active-item"); el.scrollIntoView({behavior:"smooth",block:"nearest"}); }
-}
-
-// ═══════════════════════════════════════════════════
+// ══════════════════════════════════════════════
 //  FILTERS
-// ═══════════════════════════════════════════════════
+// ══════════════════════════════════════════════
 function setFilter(btn, level) {
-  currentFilter = level;
-  document.querySelectorAll(".fchip").forEach(b => b.classList.remove("active"));
-  btn.classList.add("active");
+  filterLevel=level;
+  document.querySelectorAll(".chip").forEach(b=>b.classList.remove("on"));
+  btn.classList.add("on");
   refreshAll();
 }
-function getFiltered() {
-  return currentFilter ? allData.filter(d => d.level === currentFilter) : allData;
+function getFiltered() { return filterLevel?allData.filter(d=>d.level===filterLevel):allData; }
+
+// ══════════════════════════════════════════════
+//  HEALTH RING
+// ══════════════════════════════════════════════
+function updateRing(cityHealth, stats) {
+  const circ=2*Math.PI*25; // r=25
+  const pct=Math.max(0,Math.min(100,cityHealth));
+  const offset=circ-(pct/100)*circ;
+  const color=pct>=70?"#4ecb71":pct>=50?"#ffb800":pct>=30?"#ff6b35":"#ff2d4a";
+
+  document.getElementById("ring-fill").style.strokeDashoffset=offset;
+  document.getElementById("ring-fill").style.stroke=color;
+  document.getElementById("ring-num").textContent=Math.round(pct);
+  document.getElementById("strip-health").textContent=Math.round(pct)+"/100";
+  document.getElementById("strip-health").style.color=color;
+
+  document.getElementById("kpi-total").textContent=stats.total||0;
+  document.getElementById("kpi-crit").textContent=stats.critical||0;
+  document.getElementById("kpi-emerg").textContent=stats.emergency||0;
+
+  // Total repair budget across all roads
+  const totalBudget=allData.reduce((sum,d)=>{
+    const cost=calcIndianRepairCost(d.detections||d.all_detections||[], d.score);
+    return sum+cost.total;
+  },0);
+  document.getElementById("kpi-eco").textContent=rupee(totalBudget);
+  document.getElementById("strip-budget").textContent=rupee(totalBudget);
+  document.getElementById("map-count").textContent=allData.length;
 }
 
-// ═══════════════════════════════════════════════════
-//  SCORE RING
-// ═══════════════════════════════════════════════════
-function updateScoreRing(score, stats) {
-  const r   = 22, circ = 2 * Math.PI * r;
-  const pct = Math.max(0, Math.min(100, score));
-  const offset = circ - (pct / 100) * circ;
-  const color = pct >= 70 ? "#28a745" : pct >= 50 ? "#ffc107" : pct >= 30 ? "#fd7e14" : "#dc3545";
-
-  const fill = document.getElementById("score-ring-fill");
-  fill.style.strokeDashoffset = offset;
-  fill.style.stroke = color;
-  document.getElementById("score-ring-num").textContent = pct;
-  document.getElementById("strip-health").textContent = pct+"/100";
-
-  document.getElementById("ss-total").textContent = stats.total || 0;
-  document.getElementById("ss-crit").textContent  = stats.critical || 0;
-  document.getElementById("ss-emerg").textContent = stats.emergency || 0;
-  const eco = stats.economic_risk || 0;
-  document.getElementById("ss-eco").textContent   = fmtEco(eco);
-  document.getElementById("strip-eco").textContent = fmtEco(eco);
-}
-
-// ═══════════════════════════════════════════════════
-//  LOCATE ME
-// ═══════════════════════════════════════════════════
+// ══════════════════════════════════════════════
+//  FAB ACTIONS
+// ══════════════════════════════════════════════
 function locateMe() {
-  if (!navigator.geolocation) { alert("Geolocation not supported."); return; }
-  navigator.geolocation.getCurrentPosition(pos => {
-    const lat = pos.coords.latitude, lng = pos.coords.longitude;
-    map.flyTo([lat, lng], 16, {duration:1.5});
-    if (userMarker) map.removeLayer(userMarker);
-    userMarker = L.marker([lat, lng], {icon: L.divIcon({
-      html:`<div style="width:18px;height:18px;border-radius:50%;background:#0f3460;border:3px solid #fff;box-shadow:0 0 12px #0f3460"></div>`,
-      iconSize:[18,18], iconAnchor:[9,9], className:""
-    })}).bindPopup("📍 Your Location").addTo(map).openPopup();
-  }, () => alert("Could not get your location."));
+  if(!navigator.geolocation) return alert("Geolocation not supported.");
+  navigator.geolocation.getCurrentPosition(pos=>{
+    const{latitude:lat,longitude:lng}=pos.coords;
+    map.flyTo([lat,lng],16,{duration:1.5});
+    if(userMarker) map.removeLayer(userMarker);
+    userMarker=L.marker([lat,lng],{icon:L.divIcon({html:`<div style="width:15px;height:15px;border-radius:50%;background:#4f9cff;border:3px solid #fff;box-shadow:0 0 12px #4f9cff"></div>`,iconSize:[15,15],iconAnchor:[7,7],className:""})}).bindPopup("📍 You").addTo(map).openPopup();
+  },()=>alert("Could not get location."));
 }
-
-function fitAllMarkers() {
-  const pts = allData.filter(d => d.lat && d.lng).map(d => [d.lat, d.lng]);
-  if (pts.length) map.fitBounds(L.latLngBounds(pts).pad(0.15));
+function fitAll() {
+  const pts=allData.filter(d=>d.lat&&d.lng).map(d=>[d.lat,d.lng]);
+  if(pts.length) map.fitBounds(L.latLngBounds(pts).pad(0.12));
 }
-
-function toggleLegend() {
-  document.getElementById("map-legend").classList.toggle("show");
-  document.getElementById("fab-legend").classList.toggle("active");
+function toggleLegend(){
+  document.getElementById("legend-box").classList.toggle("show");
+  document.getElementById("fab-legend").classList.toggle("on");
 }
-
-function cycleBasemap() {
-  basemapIdx = (basemapIdx + 1) % BASEMAPS.length;
+function cycleMap(){
+  mapIdx=(mapIdx+1)%MAPS.length;
+  const m=MAPS[mapIdx];
   map.removeLayer(tileLayer);
-  tileLayer = L.tileLayer(BASEMAPS[basemapIdx].url, {subdomains:"abcd",maxZoom:22}).addTo(map);
+  tileLayer=L.tileLayer(m.url,{subdomains:m.sub||"abc",maxZoom:22}).addTo(map);
   tileLayer.bringToBack();
+  const fab=document.getElementById("fab-map");
+  const orig=fab.innerHTML;
+  fab.innerHTML=`<span style="font-size:.5rem;font-weight:800;font-family:'Rajdhani',sans-serif">${m.name}</span>`;
+  setTimeout(()=>{fab.innerHTML=orig;},1600);
+}
+function toggleSidebar(){
+  const sb=document.getElementById("sidebar");
+  const icon=document.getElementById("sb-icon");
+  sb.classList.toggle("collapsed");
+  icon.className=sb.classList.contains("collapsed")?"fas fa-chevron-right":"fas fa-chevron-left";
+  setTimeout(()=>map.invalidateSize(),360);
 }
 
-function exportMapPNG() {
-  alert("To save the map, press Ctrl+Shift+I → Network → reload page, or use your browser Print function (Ctrl+P) and save as PDF.");
-}
-
-function togglePanel() {
-  const panel  = document.getElementById("map-panel");
-  const toggle = document.getElementById("panel-toggle");
-  const icon   = document.getElementById("panel-toggle-icon");
-  panel.classList.toggle("collapsed");
-  toggle.classList.toggle("collapsed");
-  icon.className = panel.classList.contains("collapsed") ? "fas fa-chevron-right" : "fas fa-chevron-left";
-  toggle.style.left = panel.classList.contains("collapsed") ? "0px" : "320px";
-  setTimeout(() => map.invalidateSize(), 310);
-}
-
-// ═══════════════════════════════════════════════════
+// ══════════════════════════════════════════════
 //  DATA LOAD
-// ═══════════════════════════════════════════════════
+// ══════════════════════════════════════════════
 function refreshAll() {
-  const filtered = getFiltered();
-  if      (currentView === "markers") renderMarkers(filtered);
-  else if (currentView === "cluster") renderCluster(filtered);
-  else if (currentView === "heat")    renderHeat(filtered);
-  else if (currentView === "route")   renderRoutes(filtered);
+  const f=getFiltered();
+  if(currentView==="markers") renderMarkers(f);
+  else if(currentView==="labels") renderLabels(f);
+  else if(currentView==="heat") renderHeat(f);
+  else if(currentView==="route") renderRoutes(f);
   renderSidebar();
 }
 
 function loadData() {
   Promise.all([
-    fetch("/api/heatmap-data").then(r => r.json()),
-    fetch("/api/stats").then(r => r.json()),
-  ]).then(([heatData, stats]) => {
-    allData = heatData;
-    document.getElementById("map-count").textContent = heatData.length;
-    document.getElementById("last-update-text").textContent = "Updated " + new Date().toLocaleTimeString();
-    updateScoreRing(stats.city_health || 100, stats);
+    fetch("/api/heatmap-data").then(r=>r.json()),
+    fetch("/api/stats").then(r=>r.json()),
+  ]).then(([heatData, stats])=>{
+    allData=heatData;
+    // FIX: Compute city health using our improved formula
+    const cityHealth=calcCityHealth(heatData);
+    updateRing(cityHealth, stats);
     refreshAll();
-  }).catch(console.error);
+    document.getElementById("last-update").textContent="Updated "+new Date().toLocaleTimeString();
+  }).catch(err=>{
+    console.error("Data error:", err);
+    document.getElementById("last-update").textContent="⚠ Connection error — retrying…";
+  });
 }
 
-// ═══════════════════════════════════════════════════
+// ══════════════════════════════════════════════
 //  BOOT
-// ═══════════════════════════════════════════════════
-// Add pulse ring CSS
-const style = document.createElement("style");
-style.textContent = `
-  @keyframes pulse-ring { 0%{transform:scale(1);opacity:.6} 70%{transform:scale(1.8);opacity:0} 100%{transform:scale(1.8);opacity:0} }
-  .rs-popup-wrap .leaflet-popup-content-wrapper { border-radius:10px; padding:0; overflow:hidden; }
-  .rs-popup-wrap .leaflet-popup-content { margin:14px 20px; }
-`;
-document.head.appendChild(style);
+// ══════════════════════════════════════════════
+const _style=document.createElement("style");
+_style.textContent=`@keyframes pulse-ring{0%{transform:scale(1);opacity:.6}70%{transform:scale(2.3);opacity:0}100%{transform:scale(2.3);opacity:0}}`;
+document.head.appendChild(_style);
 
 loadData();
 setInterval(loadData, 15000);
